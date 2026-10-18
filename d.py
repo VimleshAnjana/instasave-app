@@ -3,7 +3,7 @@ import yt_dlp
 
 app = Flask(__name__)
 
-# ==================== PREMIUM DARK-MODERN UI (HTML/CSS/JS) ====================
+# ==================== PREMIUM DARK-MODERN UI WITH ADSTERRA ADS ====================
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="hi">
@@ -155,27 +155,26 @@ HTML_PAGE = """
             background: rgba(22, 18, 33, 0.9);
             border: 1px solid #2b233d;
             border-radius: 14px;
-            padding: 20px 12px;
+            padding: 12px;
             text-align: center;
             position: relative;
             margin-top: auto;
             margin-bottom: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
         .ad-tag {
             position: absolute;
-            top: 6px;
-            right: 8px;
+            top: 4px;
+            right: 6px;
             background: #2b233d;
             color: #9e96b0;
-            font-size: 9px;
-            padding: 2px 6px;
-            border-radius: 4px;
-        }
-        .ad-slot p {
-            color: #786d8a;
-            font-size: 13px;
-            font-weight: 600;
-            letter-spacing: 1px;
+            font-size: 8px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            z-index: 10;
         }
 
         /* Loader */
@@ -203,12 +202,12 @@ HTML_PAGE = """
             border: 1px solid #2e2442;
             border-radius: 16px;
             padding: 12px;
-            margin: 14px 0;
+            margin: 10px 0;
             position: relative;
         }
         .video-card img {
             width: 100%;
-            height: 165px;
+            height: 150px;
             object-fit: cover;
             border-radius: 12px;
             background: #000;
@@ -228,12 +227,12 @@ HTML_PAGE = """
             margin-top: 3px;
         }
 
-        /* Quality Buttons (No Ads in between!) */
+        /* Quality Buttons */
         .quality-list {
             display: flex;
             flex-direction: column;
-            gap: 11px;
-            margin: 8px 0 18px;
+            gap: 10px;
+            margin: 8px 0 14px;
         }
         .q-btn {
             display: flex;
@@ -242,10 +241,10 @@ HTML_PAGE = """
             background: rgba(28, 21, 43, 0.95);
             border: 1.5px solid rgba(181, 110, 255, 0.4);
             color: #fff;
-            padding: 13px 16px;
+            padding: 12px 15px;
             border-radius: 14px;
             text-decoration: none;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 700;
         }
         .q-badge {
@@ -323,20 +322,29 @@ HTML_PAGE = """
             </div>
         </div>
 
-        <!-- HOME BOTTOM AD -->
+        <!-- HOME BOTTOM AD (Adsterra 320x50 Banner) -->
         <div class="ad-slot">
             <span class="ad-tag">AD</span>
-            <!-- यहाँ Adsterra का Banner Code लगेगा -->
-            <p>SPONSOR AD</p>
+            <script>
+              atOptions = {
+                'key' : 'd4bfaea664a0c393e4f83f2dec735528',
+                'format' : 'iframe',
+                'height' : 50,
+                'width' : 320,
+                'params' : {}
+              };
+            </script>
+            <script src="https://bicea.org/22/d4bfaea664a0c393e4f83f2dec735528"></script>
         </div>
     </div>
 
     <!-- ================= PAGE 2: QUALITY SELECTION PAGE ================= -->
     <div id="qualityPage">
-        <!-- TOP AD (क्वालिटी पेज के सबसे ऊपर) -->
-        <div class="ad-slot" style="margin-top:0; margin-bottom:10px;">
+        <!-- TOP AD (Adsterra Native Banner) -->
+        <div class="ad-slot" style="margin-top:0; margin-bottom:8px;">
             <span class="ad-tag">AD</span>
-            <p>SPONSOR AD (TOP)</p>
+            <script async="async" data-cfasync="false" src="https://bicea.org/21/00dd1cba1d9aecb77a38116e26fe5f22"></script>
+            <div id="container-00dd1cba1d9aecb77a38116e26fe5f22"></div>
         </div>
 
         <div class="video-card">
@@ -345,7 +353,7 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
-        <!-- बीच में सिर्फ डाउनलोड बटन (कोई विज्ञापन नहीं!) -->
+        <!-- Quality Buttons (No Ads in between) -->
         <div class="quality-list">
             <a id="btn360" class="q-btn" href="#" target="_blank" onclick="saveHistory('360p Video')">
                 <span>360p</span>
@@ -364,10 +372,19 @@ HTML_PAGE = """
             </a>
         </div>
 
-        <!-- BOTTOM AD (क्वालिटी पेज के सबसे नीचे) -->
+        <!-- BOTTOM AD (Adsterra 300x250 Banner) -->
         <div class="ad-slot">
             <span class="ad-tag">AD</span>
-            <p>SPONSOR AD (BOTTOM)</p>
+            <script>
+              atOptions = {
+                'key' : '21465589bfa2a5f9c90e8aa8fd4e55c3',
+                'format' : 'iframe',
+                'height' : 250,
+                'width' : 300,
+                'params' : {}
+              };
+            </script>
+            <script src="https://bicea.org/22/21465589bfa2a5f9c90e8aa8fd4e55c3"></script>
         </div>
     </div>
 
@@ -423,7 +440,6 @@ HTML_PAGE = """
             document.getElementById("btn1080").href = data.q1080 || data.best_video;
             document.getElementById("btnMp3").href = data.mp3 || data.best_video;
 
-            // Show Quality Page
             document.getElementById("homePage").style.display = "none";
             document.getElementById("historyPage").style.display = "none";
             document.getElementById("qualityPage").style.display = "flex";
@@ -515,11 +531,9 @@ def extract():
                 vcodec = f.get("vcodec", "none")
                 acodec = f.get("acodec", "none")
 
-                # Audio only (MP3/M4A)
                 if vcodec == "none" and acodec != "none":
                     mp3_url = f_url
 
-                # Video with audio
                 if vcodec != "none":
                     best_video = f_url
                     if height <= 480:
@@ -546,5 +560,4 @@ def extract():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8082)
-
+    app.run(host="0.0.0.0", port=8081)
