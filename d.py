@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, render_template_string, Response, stream_with_context
+import yt_dlp
 import requests
 import re
 import os
@@ -261,13 +262,54 @@ def make_proxy_links(q360, q720, q1080, mp3):
         "mp3": f"/download/audio_song.mp3?url={quote(mp3, safe='')}"
     }
 
-# ==================== STABLE MULTI-API EXTRACTOR ====================
-def fetch_from_apis(url):
-    # 1. Try cobalt.tools public api
+# ==================== ROBUST YT-DLP & API EXTRACTOR ====================
+def extract_media_info(url):
+    # 1. Try yt-dlp first (Most reliable for Instagram & YouTube)
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "nocheckcertificate": True,
+        "http_headers": BROWSER_HEADERS
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            best_video = info.get("url")
+            q360, q720, q1080, mp3_url = None, None, None, None
+
+            for f in info.get("formats", []):
+                f_url = f.get("url")
+                if not f_url: continue
+                height = f.get("height") or 0
+                vcodec = f.get("vcodec", "none")
+                acodec = f.get("acodec", "none")
+
+                if vcodec == "none" and acodec != "none": mp3_url = f_url
+                if vcodec != "none":
+                    best_video = f_url
+                    if height <= 480: q360 = f_url
+                    elif height <= 720: q720 = f_url
+                    elif height >= 1080: q1080 = f_url
+
+            if best_video:
+                raw_duration = info.get("duration")
+                duration_str = f"{int(float(raw_duration)) // 60}:{int(float(raw_duration)) % 60:02d}" if raw_duration else "HD Video"
+                links = make_proxy_links(q360 or best_video, q720 or best_video, q1080 or best_video, mp3_url or best_video)
+                return {
+                    "title": info.get("title", "Social Media Video"),
+                    "thumbnail": info.get("thumbnail"),
+                    "duration": duration_str,
+                    **links
+                }
+    except Exception:
+        pass
+
+    # 2. Try Cobalt API Fallback
     try:
         payload = {"url": url}
         headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
-        r = requests.post("https://api.cobalt.tools/api/json", json=payload, headers=headers, timeout=8)
+        r = requests.post("https://api.cobalt.tools/api/json", json=payload, headers=headers, timeout=6)
         if r.status_code == 200:
             res_data = r.json()
             v_url = res_data.get("url") or res_data.get("picker", [{}])[0].get("url")
@@ -279,51 +321,6 @@ def fetch_from_apis(url):
                     "duration": "HD Ready",
                     **links
                 }
-    except Exception:
-        pass
-
-    # 2. Try SaveFrom / SnapSave Public API Fallback
-    try:
-        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=7)
-        if r.status_code == 200:
-            d = r.json().get("data", {})
-            downloads = [x for x in d.get("downloads", []) if x.get("url")]
-            if downloads:
-                best_v = downloads[0].get("url")
-                q360, q720, q1080, mp3_u = best_v, best_v, best_v, best_v
-                for item in downloads:
-                    u = item.get("url")
-                    ext = str(item.get("extension", "")).lower()
-                    res = str(item.get("format_id", "")).lower()
-                    if "mp3" in ext or "m4a" in ext or "audio" in res: mp3_u = u
-                    elif "360" in res: q360 = u
-                    elif "720" in res: q720 = u
-                    elif "1080" in res: q1080 = u
-                links = make_proxy_links(q360, q720, q1080, mp3_u)
-                return {
-                    "title": d.get("title", "Social Media Video"),
-                    "thumbnail": d.get("thumbnail"),
-                    "duration": "HD Ready",
-                    **links
-                }
-    except Exception:
-        pass
-
-    # 3. Try AllInOne Downloader API Fallback
-    try:
-        r = requests.get(f"https://allinonedownloader.com/api/ajax.php?v=1&url={quote(url)}", headers=BROWSER_HEADERS, timeout=7)
-        if r.status_code == 200:
-            res = r.json()
-            if res.get("status") == "success" and res.get("links"):
-                v_url = res["links"][0].get("url")
-                if v_url:
-                    links = make_proxy_links(v_url, v_url, v_url, v_url)
-                    return {
-                        "title": res.get("title", "Social Media Video"),
-                        "thumbnail": res.get("thumbnail"),
-                        "duration": "HD Ready",
-                        **links
-                    }
     except Exception:
         pass
 
@@ -365,11 +362,11 @@ def extract():
     data = request.get_json()
     url = data.get("url", "").strip()
     if not url:
-        return jsonify({"error": "No URL provided"}}, 400
+        return jsonify({"error": "No URL provided"}), 400
 
-    api_data = fetch_from_apis(url)
-    if api_data:
-        return jsonify(api_data)
+    media_data = extract_media_info(url)
+    if media_data:
+        return jsonify(media_data)
 
     return jsonify({"error": "Could not extract media. Please check the link and try again."}), 500
 
