@@ -1,5 +1,8 @@
 from flask import Flask, request, jsonify, render_template_string
 import yt_dlp
+import requests
+import re
+import os
 
 app = Flask(__name__)
 
@@ -36,8 +39,6 @@ HTML_PAGE = """
             flex-direction: column;
             position: relative;
         }
-
-        /* Top Header */
         .top-bar {
             display: flex;
             justify-content: space-between;
@@ -70,8 +71,6 @@ HTML_PAGE = """
             color: #9e96b0;
             margin-top: 4px;
         }
-
-        /* Neon Main Card */
         .neon-card {
             background: rgba(25, 19, 38, 0.85);
             border-radius: 20px;
@@ -119,8 +118,6 @@ HTML_PAGE = """
             cursor: pointer;
             box-shadow: 0 6px 20px rgba(236, 72, 153, 0.35);
         }
-
-        /* Side / History Button */
         .history-btn-wrap {
             display: flex;
             justify-content: center;
@@ -149,8 +146,6 @@ HTML_PAGE = """
             justify-content: center;
             font-size: 18px;
         }
-
-        /* Sponsor Ad Box */
         .ad-slot {
             background: rgba(22, 18, 33, 0.9);
             border: 1px solid #2b233d;
@@ -176,8 +171,6 @@ HTML_PAGE = """
             border-radius: 3px;
             z-index: 10;
         }
-
-        /* Loader */
         #loader {
             display: none;
             text-align: center;
@@ -193,10 +186,7 @@ HTML_PAGE = """
             margin: 0 auto 10px;
         }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        /* Page 2: Quality Selection Page */
         #qualityPage, #historyPage { display: none; flex-direction: column; flex: 1; }
-        
         .video-card {
             background: #161122;
             border: 1px solid #2e2442;
@@ -226,8 +216,6 @@ HTML_PAGE = """
             color: #8c829e;
             margin-top: 3px;
         }
-
-        /* Quality Buttons */
         .quality-list {
             display: flex;
             flex-direction: column;
@@ -261,8 +249,6 @@ HTML_PAGE = """
             gap: 10px;
             box-shadow: 0 4px 15px rgba(255, 75, 43, 0.35);
         }
-
-        /* History List */
         .history-item {
             background: #161122;
             border: 1px solid #2b233d;
@@ -292,7 +278,7 @@ HTML_PAGE = """
         <span style="font-size:12px; color:#8c829e; margin-left:auto;">⚙ Settings</span>
     </div>
 
-    <!-- ================= PAGE 1: HOME SCREEN ================= -->
+    <!-- PAGE 1: HOME SCREEN -->
     <div id="homePage" style="display:flex; flex-direction:column; flex:1;">
         <div class="brand">
             <h1>⚡ InstaSave Pro</h1>
@@ -322,7 +308,6 @@ HTML_PAGE = """
             </div>
         </div>
 
-        <!-- HOME BOTTOM AD (Adsterra 320x50 Banner) -->
         <div class="ad-slot">
             <span class="ad-tag">AD</span>
             <script>
@@ -338,9 +323,8 @@ HTML_PAGE = """
         </div>
     </div>
 
-    <!-- ================= PAGE 2: QUALITY SELECTION PAGE ================= -->
+    <!-- PAGE 2: QUALITY SELECTION PAGE -->
     <div id="qualityPage">
-        <!-- TOP AD (Adsterra Native Banner) -->
         <div class="ad-slot" style="margin-top:0; margin-bottom:8px;">
             <span class="ad-tag">AD</span>
             <script async="async" data-cfasync="false" src="https://bicea.org/21/00dd1cba1d9aecb77a38116e26fe5f22"></script>
@@ -353,7 +337,6 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
-        <!-- Quality Buttons -->
         <div class="quality-list">
             <a id="btn360" class="q-btn" href="#" target="_blank" onclick="saveHistory('360p Video')">
                 <span>360p</span>
@@ -372,7 +355,6 @@ HTML_PAGE = """
             </a>
         </div>
 
-        <!-- BOTTOM AD (Adsterra 300x250 Banner) -->
         <div class="ad-slot">
             <span class="ad-tag">AD</span>
             <script>
@@ -388,7 +370,7 @@ HTML_PAGE = """
         </div>
     </div>
 
-    <!-- ================= PAGE 3: DOWNLOAD HISTORY PAGE ================= -->
+    <!-- PAGE 3: DOWNLOAD HISTORY PAGE -->
     <div id="historyPage">
         <h3 style="margin-bottom:15px; color:#e2c6ff;">📂 Downloaded History</h3>
         <div id="historyList"></div>
@@ -497,7 +479,64 @@ HTML_PAGE = """
 </html>
 """
 
-# ==================== PYTHON SERVER (YT-DLP ENGINE WITH BYPASS) ====================
+# ==================== INSTAGRAM SMART FALLBACK ====================
+def instagram_fallback(url):
+    """अगर क्लाउड IP पर yt-dlp ब्लॉक हो जाए, तो सीधे Embed/Proxy से वीडियो निकालेगा"""
+    match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
+    if not match:
+        return None
+    shortcode = match.group(1)
+
+    # Method 1: Instagram Embed Captioned Page
+    try:
+        embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        }
+        r = requests.get(embed_url, headers=headers, timeout=10)
+        v_match = re.search(r'"video_url":"([^"]+)"', r.text)
+        if v_match:
+            video_url = v_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/')
+            t_match = re.search(r'"display_url":"([^"]+)"', r.text)
+            thumb = t_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/') if t_match else None
+            return {
+                "title": f"Instagram Reel ({shortcode})",
+                "thumbnail": thumb,
+                "duration": "Reel/Video",
+                "best_video": video_url,
+                "q360": video_url,
+                "q720": video_url,
+                "q1080": video_url,
+                "mp3": video_url
+            }
+    except Exception:
+        pass
+
+    # Method 2:vxinstagram / ddinstagram OpenGraph Fallback
+    for domain in ["https://www.ddinstagram.com", "https://kkinstagram.com"]:
+        try:
+            r = requests.get(f"{domain}/reel/{shortcode}", headers={"User-Agent": "TelegramBot (like TwitterBot)"}, timeout=10)
+            og_vid = re.search(r'<meta property="og:video" content="([^"]+)"', r.text)
+            if og_vid:
+                video_url = og_vid.group(1).replace("&amp;", "&")
+                og_img = re.search(r'<meta property="og:image" content="([^"]+)"', r.text)
+                thumb = og_img.group(1).replace("&amp;", "&") if og_img else None
+                return {
+                    "title": f"Instagram Reel ({shortcode})",
+                    "thumbnail": thumb,
+                    "duration": "Reel/Video",
+                    "best_video": video_url,
+                    "q360": video_url,
+                    "q720": video_url,
+                    "q1080": video_url,
+                    "mp3": video_url
+                }
+        except Exception:
+            pass
+
+    return None
+
+# ==================== PYTHON SERVER (YT-DLP ENGINE) ====================
 @app.route("/")
 def index():
     return render_template_string(HTML_PAGE)
@@ -509,20 +548,24 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # यहाँ yt-dlp के ऑप्शंस को बॉट डिटेक्शन और साइन-इन एरर से बचाने के लिए अपडेट किया गया है
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
+        "nocheckcertificate": True,
         "extractor_args": {
             "instagram": {"max_comments": [0]},
-            "youtube": {"player_client": ["android", "web"]}
+            "youtube": {"player_client": ["ios", "tv_embedded", "mweb"]}
         },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
         }
     }
+
+    # अगर फोल्डर में cookies.txt मौजूद है तो अपने आप इस्तेमाल करेगा
+    if os.path.exists("cookies.txt"):
+        ydl_opts["cookiefile"] = "cookies.txt"
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -552,8 +595,13 @@ def extract():
                     elif height >= 1080:
                         q1080 = f_url
 
-            duration_sec = info.get("duration")
-            duration_str = f"{duration_sec // 60}:{duration_sec % 60:02d}" if duration_sec else "Reel/Video"
+            # FIXED: float duration को int में बदला गया ताकि Facebook पर एरर न आए
+            raw_duration = info.get("duration")
+            if raw_duration is not None:
+                duration_sec = int(float(raw_duration))
+                duration_str = f"{duration_sec // 60}:{duration_sec % 60:02d}"
+            else:
+                duration_str = "Reel/Video"
 
             return jsonify({
                 "title": info.get("title", "Social Media Video"),
@@ -566,8 +614,12 @@ def extract():
                 "mp3": mp3_url or best_video
             })
     except Exception as e:
+        # अगर Instagram लिंक था और yt-dlp ब्लॉक हुआ, तो ऑटो-बाईपास चलाएं
+        if "instagram.com" in url:
+            fallback_data = instagram_fallback(url)
+            if fallback_data:
+                return jsonify(fallback_data)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8082)
-    
