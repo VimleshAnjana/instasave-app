@@ -509,10 +509,19 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
+    # यहाँ हमने yt-dlp के ऑप्शंस को अपडेट कर दिया है ताकि Instagram ब्लॉक न करे
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
+        "extractor_args": {
+            "instagram": {
+                "max_comments": [0]
+            }
+        },
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
     }
 
     try:
@@ -558,6 +567,7 @@ def extract():
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+                
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8082)
