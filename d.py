@@ -3,11 +3,10 @@ import yt_dlp
 import requests
 import re
 import os
-import time
 
 app = Flask(__name__)
 
-# ==================== PREMIUM DARK-MODERN UI WITH ADSTERRA ADS ====================
+# ==================== PREMIUM DARK-MODERN UI ====================
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="hi">
@@ -16,259 +15,39 @@ HTML_PAGE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>InstaSave Pro</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Segoe UI', Roboto, Helvetica, sans-serif;
-            -webkit-tap-highlight-color: transparent;
-        }
-        body {
-            background-color: #0b0713;
-            color: #ffffff;
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-        }
-        .app-shell {
-            width: 100%;
-            max-width: 420px;
-            background: radial-gradient(circle at top, #1f1135 0%, #0d0914 65%);
-            min-height: 100vh;
-            padding: 20px 18px;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 18px;
-        }
-        .back-btn {
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.15);
-            color: #fff;
-            padding: 7px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            cursor: pointer;
-            display: none;
-        }
-        .brand {
-            text-align: center;
-            margin: 5px 0 22px;
-        }
-        .brand h1 {
-            font-size: 27px;
-            font-weight: 800;
-            background: linear-gradient(90deg, #b56eff, #ff5e7e, #ff9a52);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        .brand p {
-            font-size: 12px;
-            color: #9e96b0;
-            margin-top: 4px;
-        }
-        .neon-card {
-            background: rgba(25, 19, 38, 0.85);
-            border-radius: 20px;
-            padding: 18px;
-            border: 1.5px solid rgba(217, 70, 239, 0.35);
-            box-shadow: 0 0 25px rgba(217, 70, 239, 0.12);
-        }
-        .input-box {
-            display: flex;
-            align-items: center;
-            background: #120d1d;
-            border: 1px solid #352849;
-            border-radius: 14px;
-            padding: 6px 6px 6px 14px;
-        }
-        .input-box input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: #fff;
-            font-size: 14px;
-            outline: none;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: #0b0713; color: #ffffff; display: flex; justify-content: center; min-height: 100vh; }
+        .app-shell { width: 100%; max-width: 420px; background: radial-gradient(circle at top, #1f1135 0%, #0d0914 65%); min-height: 100vh; padding: 20px 18px; display: flex; flex-direction: column; position: relative; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+        .back-btn { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; padding: 7px 14px; border-radius: 20px; font-size: 13px; cursor: pointer; display: none; }
+        .brand { text-align: center; margin: 5px 0 22px; }
+        .brand h1 { font-size: 27px; font-weight: 800; background: linear-gradient(90deg, #b56eff, #ff5e7e, #ff9a52); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .brand p { font-size: 12px; color: #9e96b0; margin-top: 4px; }
+        .neon-card { background: rgba(25, 19, 38, 0.85); border-radius: 20px; padding: 18px; border: 1.5px solid rgba(217, 70, 239, 0.35); box-shadow: 0 0 25px rgba(217, 70, 239, 0.12); }
+        .input-box { display: flex; align-items: center; background: #120d1d; border: 1px solid #352849; border-radius: 14px; padding: 6px 6px 6px 14px; }
+        .input-box input { flex: 1; background: transparent; border: none; color: #fff; font-size: 14px; outline: none; }
         .input-box input::placeholder { color: #786d8a; }
-        .paste-btn {
-            background: rgba(181, 110, 255, 0.15);
-            border: 1px solid #b56eff;
-            color: #e2c6ff;
-            padding: 9px 14px;
-            border-radius: 10px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .main-download-btn {
-            width: 100%;
-            margin-top: 16px;
-            padding: 15px;
-            border: none;
-            border-radius: 14px;
-            background: linear-gradient(90deg, #7c3aed, #ec4899, #f97316);
-            color: white;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 6px 20px rgba(236, 72, 153, 0.35);
-        }
-        .history-btn-wrap {
-            display: flex;
-            justify-content: center;
-            margin: 26px 0;
-        }
-        .history-btn {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: rgba(30, 24, 46, 0.9);
-            border: 1px solid #382c4e;
-            padding: 12px 24px;
-            border-radius: 16px;
-            color: #fff;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-        .history-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
-            background: rgba(236, 72, 153, 0.15);
-            border: 1px solid #ec4899;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-        .ad-slot {
-            background: rgba(22, 18, 33, 0.9);
-            border: 1px solid #2b233d;
-            border-radius: 14px;
-            padding: 12px;
-            text-align: center;
-            position: relative;
-            margin-top: auto;
-            margin-bottom: 8px;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        .ad-tag {
-            position: absolute;
-            top: 4px;
-            right: 6px;
-            background: #2b233d;
-            color: #9e96b0;
-            font-size: 8px;
-            padding: 1px 5px;
-            border-radius: 3px;
-            z-index: 10;
-        }
-        #loader {
-            display: none;
-            text-align: center;
-            margin: 25px 0;
-        }
-        .spinner {
-            width: 38px;
-            height: 38px;
-            border: 4px solid #2b233d;
-            border-top: 4px solid #ec4899;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin: 0 auto 10px;
-        }
+        .paste-btn { background: rgba(181, 110, 255, 0.15); border: 1px solid #b56eff; color: #e2c6ff; padding: 9px 14px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+        .main-download-btn { width: 100%; margin-top: 16px; padding: 15px; border: none; border-radius: 14px; background: linear-gradient(90deg, #7c3aed, #ec4899, #f97316); color: white; font-size: 16px; font-weight: 700; cursor: pointer; box-shadow: 0 6px 20px rgba(236, 72, 153, 0.35); }
+        .history-btn-wrap { display: flex; justify-content: center; margin: 26px 0; }
+        .history-btn { display: flex; align-items: center; gap: 12px; background: rgba(30, 24, 46, 0.9); border: 1px solid #382c4e; padding: 12px 24px; border-radius: 16px; color: #fff; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .history-icon { width: 36px; height: 36px; border-radius: 10px; background: rgba(236, 72, 153, 0.15); border: 1px solid #ec4899; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .ad-slot { background: rgba(22, 18, 33, 0.9); border: 1px solid #2b233d; border-radius: 14px; padding: 12px; text-align: center; position: relative; margin-top: auto; margin-bottom: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        .ad-tag { position: absolute; top: 4px; right: 6px; background: #2b233d; color: #9e96b0; font-size: 8px; padding: 1px 5px; border-radius: 3px; z-index: 10; }
+        #loader { display: none; text-align: center; margin: 25px 0; }
+        .spinner { width: 38px; height: 38px; border: 4px solid #2b233d; border-top: 4px solid #ec4899; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 10px; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
         #qualityPage, #historyPage { display: none; flex-direction: column; flex: 1; }
-        .video-card {
-            background: #161122;
-            border: 1px solid #2e2442;
-            border-radius: 16px;
-            padding: 12px;
-            margin: 10px 0;
-            position: relative;
-        }
-        .video-card img {
-            width: 100%;
-            height: 150px;
-            object-fit: cover;
-            border-radius: 12px;
-            background: #000;
-        }
-        .video-title {
-            font-size: 13px;
-            font-weight: 600;
-            margin-top: 8px;
-            color: #e2dcf0;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .video-meta {
-            font-size: 11px;
-            color: #8c829e;
-            margin-top: 3px;
-        }
-        .quality-list {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            margin: 8px 0 14px;
-        }
-        .q-btn {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(28, 21, 43, 0.95);
-            border: 1.5px solid rgba(181, 110, 255, 0.4);
-            color: #fff;
-            padding: 12px 15px;
-            border-radius: 14px;
-            text-decoration: none;
-            font-size: 15px;
-            font-weight: 700;
-        }
-        .q-badge {
-            font-size: 11px;
-            background: rgba(255,255,255,0.1);
-            padding: 3px 8px;
-            border-radius: 6px;
-            color: #d1c6e6;
-        }
-        .mp3-btn {
-            background: linear-gradient(90deg, #ff4b2b, #ff7b1c);
-            border: none;
-            justify-content: center;
-            gap: 10px;
-            box-shadow: 0 4px 15px rgba(255, 75, 43, 0.35);
-        }
-        .history-item {
-            background: #161122;
-            border: 1px solid #2b233d;
-            border-radius: 12px;
-            padding: 12px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .history-item a {
-            background: #7c3aed;
-            color: #fff;
-            text-decoration: none;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: bold;
-        }
+        .video-card { background: #161122; border: 1px solid #2e2442; border-radius: 16px; padding: 12px; margin: 10px 0; position: relative; }
+        .video-card img { width: 100%; height: 150px; object-fit: cover; border-radius: 12px; background: #000; }
+        .video-title { font-size: 13px; font-weight: 600; margin-top: 8px; color: #e2dcf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .video-meta { font-size: 11px; color: #8c829e; margin-top: 3px; }
+        .quality-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 14px; }
+        .q-btn { display: flex; justify-content: space-between; align-items: center; background: rgba(28, 21, 43, 0.95); border: 1.5px solid rgba(181, 110, 255, 0.4); color: #fff; padding: 12px 15px; border-radius: 14px; text-decoration: none; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .q-badge { font-size: 11px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 6px; color: #d1c6e6; }
+        .mp3-btn { background: linear-gradient(90deg, #ff4b2b, #ff7b1c); border: none; justify-content: center; gap: 10px; box-shadow: 0 4px 15px rgba(255, 75, 43, 0.35); }
+        .history-item { background: #161122; border: 1px solid #2b233d; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .history-item a { background: #7c3aed; color: #fff; text-decoration: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -279,7 +58,7 @@ HTML_PAGE = """
         <span style="font-size:12px; color:#8c829e; margin-left:auto;">⚙ Settings</span>
     </div>
 
-    <!-- PAGE 1: HOME SCREEN -->
+    <!-- HOME SCREEN -->
     <div id="homePage" style="display:flex; flex-direction:column; flex:1;">
         <div class="brand">
             <h1>⚡ InstaSave Pro</h1>
@@ -312,19 +91,13 @@ HTML_PAGE = """
         <div class="ad-slot">
             <span class="ad-tag">AD</span>
             <script>
-              atOptions = {
-                'key' : 'd4bfaea664a0c393e4f83f2dec735528',
-                'format' : 'iframe',
-                'height' : 50,
-                'width' : 320,
-                'params' : {}
-              };
+              atOptions = { 'key' : 'd4bfaea664a0c393e4f83f2dec735528', 'format' : 'iframe', 'height' : 50, 'width' : 320, 'params' : {} };
             </script>
             <script src="https://bicea.org/22/d4bfaea664a0c393e4f83f2dec735528"></script>
         </div>
     </div>
 
-    <!-- PAGE 2: QUALITY SELECTION PAGE -->
+    <!-- QUALITY SELECTION PAGE -->
     <div id="qualityPage">
         <div class="ad-slot" style="margin-top:0; margin-bottom:8px;">
             <span class="ad-tag">AD</span>
@@ -338,40 +111,35 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
+        <!-- Direct Download Buttons (No Video Player Popup!) -->
         <div class="quality-list">
-            <a id="btn360" class="q-btn" href="#" target="_blank" onclick="saveHistory('360p Video')">
-                <span>360p</span>
-                <span class="q-badge">SD ⬇</span>
+            <a id="btn360" class="q-btn" href="#" download target="_blank" onclick="saveHistory('360p Video')">
+                <span>360p (SD Download)</span>
+                <span class="q-badge">⬇ Save</span>
             </a>
-            <a id="btn720" class="q-btn" href="#" target="_blank" onclick="saveHistory('720p HD')">
-                <span>720p</span>
-                <span class="q-badge">HD ⬇</span>
+            <a id="btn720" class="q-btn" href="#" download target="_blank" onclick="saveHistory('720p HD')">
+                <span>720p (HD Download)</span>
+                <span class="q-badge">⬇ Save</span>
             </a>
-            <a id="btn1080" class="q-btn" href="#" target="_blank" onclick="saveHistory('1080p Full HD')">
-                <span>1080p <span style="color:#ff5e7e;">(HD)</span></span>
-                <span class="q-badge">FHD ⬇</span>
+            <a id="btn1080" class="q-btn" href="#" download target="_blank" onclick="saveHistory('1080p Full HD')">
+                <span>1080p <span style="color:#ff5e7e;">(Full HD)</span></span>
+                <span class="q-badge">⬇ Save</span>
             </a>
-            <a id="btnMp3" class="q-btn mp3-btn" href="#" target="_blank" onclick="saveHistory('MP3 Audio Song')">
-                <span>🎵 Download MP3 (Audio/Song)</span>
+            <a id="btnMp3" class="q-btn mp3-btn" href="#" download target="_blank" onclick="saveHistory('MP3 Audio Song')">
+                <span>🎵 Download MP3 Song (Audio)</span>
             </a>
         </div>
 
         <div class="ad-slot">
             <span class="ad-tag">AD</span>
             <script>
-              atOptions = {
-                'key' : '21465589bfa2a5f9c90e8aa8fd4e55c3',
-                'format' : 'iframe',
-                'height' : 250,
-                'width' : 300,
-                'params' : {}
-              };
+              atOptions = { 'key' : '21465589bfa2a5f9c90e8aa8fd4e55c3', 'format' : 'iframe', 'height' : 250, 'width' : 300, 'params' : {} };
             </script>
             <script src="https://bicea.org/22/21465589bfa2a5f9c90e8aa8fd4e55c3"></script>
         </div>
     </div>
 
-    <!-- PAGE 3: DOWNLOAD HISTORY PAGE -->
+    <!-- DOWNLOAD HISTORY PAGE -->
     <div id="historyPage">
         <h3 style="margin-bottom:15px; color:#e2c6ff;">📂 Downloaded History</h3>
         <div id="historyList"></div>
@@ -386,7 +154,7 @@ HTML_PAGE = """
             const text = await navigator.clipboard.readText();
             document.getElementById("videoUrl").value = text;
         } catch (e) {
-            alert("बॉक्स में उंगली दबाकर (Long Press) लिंक पेस्ट करें।");
+            alert("बॉक्स में उंगली दबाकर लिंक पेस्ट करें।");
         }
     }
 
@@ -416,7 +184,7 @@ HTML_PAGE = """
             currentVideoData = data;
             document.getElementById("thumbImg").src = data.thumbnail || "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Preview";
             document.getElementById("vidTitle").innerText = data.title || "Social Media Video";
-            document.getElementById("vidMeta").innerText = `Duration: ${data.duration || 'N/A'} • Ready to Save`;
+            document.getElementById("vidMeta").innerText = `Duration: ${data.duration || 'N/A'} • Ready to Download`;
 
             document.getElementById("btn360").href = data.q360 || data.best_video;
             document.getElementById("btn720").href = data.q720 || data.best_video;
@@ -454,7 +222,7 @@ HTML_PAGE = """
         let history = JSON.parse(localStorage.getItem("instaSaveHistory") || "[]");
         const container = document.getElementById("historyList");
         if (history.length === 0) {
-            container.innerHTML = "<p style='color:#8c829e; font-size:14px;'>अभी तक कोई वीडियो डाउनलोड नहीं किया गया है।</p>";
+            container.innerHTML = "<p style='color:#8c829e; font-size:14px;'>अभी तक कोई डाउनलोड हिस्ट्री नहीं है।</p>";
             return;
         }
         container.innerHTML = history.map(item => `
@@ -463,7 +231,7 @@ HTML_PAGE = """
                     <div style="font-size:13px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.title}</div>
                     <div style="font-size:11px; color:#ff5e7e;">${item.type} • ${item.time}</div>
                 </div>
-                <a href="${item.link}" target="_blank">Open</a>
+                <a href="${item.link}" download target="_blank">Download</a>
             </div>
         `).join("");
     }
@@ -480,9 +248,8 @@ HTML_PAGE = """
 </html>
 """
 
-# ==================== MULTI-SERVER FALLBACK FOR ALL PLATFORMS ====================
+# ==================== BACKEND EXTRACTOR ====================
 def universal_api_fallback(url):
-    """VKR / Public Multi-Downloader API for Instagram, YouTube, FB"""
     try:
         r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=8)
         if r.status_code == 200:
@@ -495,16 +262,11 @@ def universal_api_fallback(url):
                     u = item.get("url")
                     ext = str(item.get("extension", "")).lower()
                     res = str(item.get("format_id", "")).lower()
-                    if not u:
-                        continue
-                    if "mp3" in ext or "m4a" in ext or "audio" in res:
-                        mp3_u = u
-                    elif "360" in res:
-                        q360 = u
-                    elif "720" in res:
-                        q720 = u
-                    elif "1080" in res:
-                        q1080 = u
+                    if not u: continue
+                    if "mp3" in ext or "m4a" in ext or "audio" in res: mp3_u = u
+                    elif "360" in res: q360 = u
+                    elif "720" in res: q720 = u
+                    elif "1080" in res: q1080 = u
                 return {
                     "title": d.get("title", "Social Media Video"),
                     "thumbnail": d.get("thumbnail"),
@@ -519,150 +281,6 @@ def universal_api_fallback(url):
         pass
     return None
 
-def instagram_fallback(url):
-    # 1. Try Universal API first
-    uni = universal_api_fallback(url)
-    if uni:
-        return uni
-
-    match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
-    if not match:
-        return None
-    shortcode = match.group(1)
-
-    # 2. Try Instagram Embed
-    try:
-        embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36"}
-        r = requests.get(embed_url, headers=headers, timeout=8)
-        v_match = re.search(r'"video_url":"([^"]+)"', r.text)
-        if v_match:
-            video_url = v_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/')
-            t_match = re.search(r'"display_url":"([^"]+)"', r.text)
-            thumb = t_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/') if t_match else None
-            return {
-                "title": f"Instagram Reel ({shortcode})",
-                "thumbnail": thumb,
-                "duration": "Reel/Video",
-                "best_video": video_url,
-                "q360": video_url,
-                "q720": video_url,
-                "q1080": video_url,
-                "mp3": video_url
-            }
-    except Exception:
-        pass
-
-    # 3. Try ddinstagram / kkinstagram OpenGraph
-    for domain in ["https://www.ddinstagram.com", "https://kkinstagram.com"]:
-        try:
-            r = requests.get(f"{domain}/reel/{shortcode}", headers={"User-Agent": "TelegramBot (like TwitterBot)"}, timeout=8)
-            og_vid = re.search(r'<meta property="og:video" content="([^"]+)"', r.text)
-            if og_vid:
-                video_url = og_vid.group(1).replace("&amp;", "&")
-                og_img = re.search(r'<meta property="og:image" content="([^"]+)"', r.text)
-                thumb = og_img.group(1).replace("&amp;", "&") if og_img else None
-                return {
-                    "title": f"Instagram Reel ({shortcode})",
-                    "thumbnail": thumb,
-                    "duration": "Reel/Video",
-                    "best_video": video_url,
-                    "q360": video_url,
-                    "q720": video_url,
-                    "q1080": video_url,
-                    "mp3": video_url
-                }
-        except Exception:
-            pass
-    return None
-
-# ==================== FAIL-PROOF YOUTUBE ENGINE (NEVER BLOCKED) ====================
-def youtube_smart_extract(url):
-    match = re.search(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|shorts/|embed/))([0-9A-Za-z_-]{11})", url)
-    if not match:
-        return None
-    vid_id = match.group(1)
-
-    title = "YouTube Video"
-    thumb = f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
-
-    # Official oEmbed (100% Bot-Free & Instant)
-    try:
-        oem = requests.get(f"https://noembed.com/embed?url=https://www.youtube.com/watch?v={vid_id}", timeout=5)
-        if oem.status_code == 200:
-            title = oem.json().get("title", title)
-    except Exception:
-        pass
-
-    # Point quality buttons to our Cloud Stream Resolver endpoint
-    return {
-        "title": title,
-        "thumbnail": thumb,
-        "duration": "YouTube HD • MP3",
-        "best_video": f"/api/yt_stream?id={vid_id}&f=720",
-        "q360": f"/api/yt_stream?id={vid_id}&f=360",
-        "q720": f"/api/yt_stream?id={vid_id}&f=720",
-        "q1080": f"/api/yt_stream?id={vid_id}&f=1080",
-        "mp3": f"/api/yt_stream?id={vid_id}&f=mp3"
-    }
-
-@app.route("/api/yt_stream")
-def yt_stream():
-    """जब यूज़र 360p/720p/1080p/MP3 बटन दबाएगा, यह क्लाउड इंजन सीधे फाइल डाउनलोड चालू करेगा"""
-    vid_id = request.args.get("id", "")
-    fmt = request.args.get("f", "720")
-    yt_url = f"https://www.youtube.com/watch?v={vid_id}"
-
-    # 1. Try OceanSaver / Loader Cloud API (Direct MP4/MP3 file link)
-    try:
-        init_res = requests.get(
-            "https://p.oceansaver.in/ajax/download.php",
-            params={"format": fmt, "url": yt_url, "api": "dfcb6d76f2f6a9894gjkege8a4ab232222"},
-            timeout=8
-        ).json()
-        if init_res.get("success") and init_res.get("id"):
-            task_id = init_res["id"]
-            for _ in range(10):
-                time.sleep(1.2)
-                prog = requests.get(f"https://p.oceansaver.in/ajax/progress.php?id={task_id}", timeout=6).json()
-                if prog.get("download_url"):
-                    return redirect(prog["download_url"])
-    except Exception:
-        pass
-
-    # 2. Try Universal VKR API
-    uni = universal_api_fallback(yt_url)
-    if uni:
-        if fmt == "mp3" and uni.get("mp3"):
-            return redirect(uni["mp3"])
-        elif fmt == "360" and uni.get("q360"):
-            return redirect(uni["q360"])
-        elif fmt == "1080" and uni.get("q1080"):
-            return redirect(uni["q1080"])
-        elif uni.get("best_video"):
-            return redirect(uni["best_video"])
-
-    # 3. Direct embedded widget fallback (Guaranteed download screen)
-    return render_template_string("""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Downloading...</title>
-        <style>
-            body { background:#0b0713; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; padding:20px; text-align:center; }
-            iframe { width:100%; max-width:380px; height:65px; border:none; border-radius:12px; margin-top:15px; }
-        </style>
-    </head>
-    <body>
-        <h3>⚡ आपकी {{ fmt }} फाइल तैयार है</h3>
-        <p style="font-size:13px; color:#9e96b0;">नीचे दिए गए बटन पर टैप करके सेव करें:</p>
-        <iframe src="https://loader.to/api/button/?url=https://www.youtube.com/watch?v={{ vid_id }}&f={{ fmt }}"></iframe>
-    </body>
-    </html>
-    """, vid_id=vid_id, fmt=fmt)
-
-# ==================== PYTHON SERVER (MAIN ROUTES) ====================
 @app.route("/")
 def index():
     return render_template_string(HTML_PAGE)
@@ -674,86 +292,51 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # अगर YouTube लिंक है और cookies.txt नहीं है, तो बिना बॉट एरर के तुरंत YouTube Cloud Engine चलाएं!
-    if ("youtube.com" in url or "youtu.be" in url) and not os.path.exists("cookies.txt"):
-        yt_data = youtube_smart_extract(url)
-        if yt_data:
-            return jsonify(yt_data)
+    uni = universal_api_fallback(url)
+    if uni:
+        return jsonify(uni)
 
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "nocheckcertificate": True,
-        "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            "Accept-Language": "en-US,en;q=0.9"
-        }
     }
-
-    if os.path.exists("cookies.txt"):
-        ydl_opts["cookiefile"] = "cookies.txt"
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
             formats = info.get("formats", [])
-
             best_video = info.get("url")
-            q360, q720, q1080, mp3_url = None, None, None, None
+            q360, q720, q1080, mp3_url = best_video, best_video, best_video, best_video
 
             for f in formats:
                 f_url = f.get("url")
-                if not f_url:
-                    continue
+                if not f_url: continue
                 height = f.get("height") or 0
                 vcodec = f.get("vcodec", "none")
                 acodec = f.get("acodec", "none")
 
-                if vcodec == "none" and acodec != "none":
-                    mp3_url = f_url
-
+                if vcodec == "none" and acodec != "none": mp3_url = f_url
                 if vcodec != "none":
-                    best_video = f_url
-                    if height <= 480:
-                        q360 = f_url
-                    elif height <= 720:
-                        q720 = f_url
-                    elif height >= 1080:
-                        q1080 = f_url
+                    if height <= 480: q360 = f_url
+                    elif height <= 720: q720 = f_url
+                    elif height >= 1080: q1080 = f_url
 
             raw_duration = info.get("duration")
-            if raw_duration is not None:
-                duration_sec = int(float(raw_duration))
-                duration_str = f"{duration_sec // 60}:{duration_sec % 60:02d}"
-            else:
-                duration_str = "Reel/Video"
+            duration_str = f"{int(float(raw_duration)) // 60}:{int(float(raw_duration)) % 60:02d}" if raw_duration else "HD Video"
 
             return jsonify({
                 "title": info.get("title", "Social Media Video"),
                 "thumbnail": info.get("thumbnail"),
                 "duration": duration_str,
                 "best_video": best_video,
-                "q360": q360 or best_video,
-                "q720": q720 or best_video,
-                "q1080": q1080 or best_video,
-                "mp3": mp3_url or best_video
+                "q360": q360,
+                "q720": q720,
+                "q1080": q1080,
+                "mp3": mp3_url
             })
     except Exception as e:
-        if "instagram.com" in url:
-            fallback_data = instagram_fallback(url)
-            if fallback_data:
-                return jsonify(fallback_data)
-
-        if "youtube.com" in url or "youtu.be" in url:
-            yt_data = youtube_smart_extract(url)
-            if yt_data:
-                return jsonify(yt_data)
-
-        uni_data = universal_api_fallback(url)
-        if uni_data:
-            return jsonify(uni_data)
-
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
