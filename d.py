@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, redirect, Response, stream_with_context
+from flask import Flask, request, jsonify, render_template_string, Response, stream_with_context
 import requests
 import re
 import os
@@ -111,7 +111,6 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
-        <!-- Direct .mp4 and .mp3 Download Links -->
         <div class="quality-list">
             <a id="btn360" class="q-btn" href="#" onclick="saveHistory('360p Video')">
                 <span>360p (SD Download)</span>
@@ -262,9 +261,28 @@ def make_proxy_links(q360, q720, q1080, mp3):
         "mp3": f"/download/audio_song.mp3?url={quote(mp3, safe='')}"
     }
 
-# ==================== MULTI-API FAIL-PROOF EXTRACTOR ====================
+# ==================== ADVANCED MULTI-API EXTRACTOR ====================
 def fetch_from_apis(url):
-    # 1. Try VKR Downloader API
+    # 1. Try Cobalt API (Primary & Fastest)
+    try:
+        payload = {"url": url, "vQuality": "720"}
+        headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+        r = requests.post("https://co.wuk.sh/api/json", json=payload, headers=headers, timeout=8)
+        if r.status_code == 200:
+            res_data = r.json()
+            v_url = res_data.get("url") or res_data.get("picker", [{}])[0].get("url")
+            if v_url:
+                links = make_proxy_links(v_url, v_url, v_url, v_url)
+                return {
+                    "title": res_data.get("filename", "Social Media Video"),
+                    "thumbnail": "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Ready",
+                    "duration": "HD Ready",
+                    **links
+                }
+    except Exception:
+        pass
+
+    # 2. Try SaveFrom / SnapSave Public API Fallback
     try:
         r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=7)
         if r.status_code == 200:
@@ -291,28 +309,9 @@ def fetch_from_apis(url):
     except Exception:
         pass
 
-    # 2. Try Cobalt API (Universal Fast Downloader)
-    try:
-        payload = {"url": url, "vQuality": "720"}
-        headers = {"Accept": "application/json", "Content-Type": "application/json"}
-        r = requests.post("https://co.wuk.sh/api/json", json=payload, headers=headers, timeout=8)
-        if r.status_code == 200:
-            res_data = r.json()
-            if res_data.get("status") == "redirect" or res_data.get("url"):
-                v_url = res_data.get("url")
-                links = make_proxy_links(v_url, v_url, v_url, v_url)
-                return {
-                    "title": "Downloaded Video",
-                    "thumbnail": "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Ready",
-                    "duration": "HD Video",
-                    **links
-                }
-    except Exception:
-        pass
-
     return None
 
-# ==================== DIRECT .MP4 & .MP3 STREAMING ROUTE ====================
+# ==================== STREAMING ROUTE ====================
 @app.route("/download/<filename>")
 def download_file(filename):
     target_url = request.args.get("url")
@@ -350,7 +349,6 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # Multi-API Fallback Engine (Works for Instagram, YouTube & Facebook instantly)
     api_data = fetch_from_apis(url)
     if api_data:
         return jsonify(api_data)
