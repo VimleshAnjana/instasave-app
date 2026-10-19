@@ -261,13 +261,13 @@ def make_proxy_links(q360, q720, q1080, mp3):
         "mp3": f"/download/audio_song.mp3?url={quote(mp3, safe='')}"
     }
 
-# ==================== ADVANCED MULTI-API EXTRACTOR ====================
+# ==================== STABLE MULTI-API EXTRACTOR ====================
 def fetch_from_apis(url):
-    # 1. Try Cobalt API (Primary & Fastest)
+    # 1. Try cobalt.tools public api
     try:
-        payload = {"url": url, "vQuality": "720"}
+        payload = {"url": url}
         headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
-        r = requests.post("https://co.wuk.sh/api/json", json=payload, headers=headers, timeout=8)
+        r = requests.post("https://api.cobalt.tools/api/json", json=payload, headers=headers, timeout=8)
         if r.status_code == 200:
             res_data = r.json()
             v_url = res_data.get("url") or res_data.get("picker", [{}])[0].get("url")
@@ -309,6 +309,24 @@ def fetch_from_apis(url):
     except Exception:
         pass
 
+    # 3. Try AllInOne Downloader API Fallback
+    try:
+        r = requests.get(f"https://allinonedownloader.com/api/ajax.php?v=1&url={quote(url)}", headers=BROWSER_HEADERS, timeout=7)
+        if r.status_code == 200:
+            res = r.json()
+            if res.get("status") == "success" and res.get("links"):
+                v_url = res["links"][0].get("url")
+                if v_url:
+                    links = make_proxy_links(v_url, v_url, v_url, v_url)
+                    return {
+                        "title": res.get("title", "Social Media Video"),
+                        "thumbnail": res.get("thumbnail"),
+                        "duration": "HD Ready",
+                        **links
+                    }
+    except Exception:
+        pass
+
     return None
 
 # ==================== STREAMING ROUTE ====================
@@ -347,7 +365,7 @@ def extract():
     data = request.get_json()
     url = data.get("url", "").strip()
     if not url:
-        return jsonify({"error": "No URL provided"}), 400
+        return jsonify({"error": "No URL provided"}}, 400
 
     api_data = fetch_from_apis(url)
     if api_data:
