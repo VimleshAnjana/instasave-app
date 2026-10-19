@@ -1,14 +1,12 @@
-from flask import Flask, request, jsonify, render_template_string, Response, stream_with_context
-import yt_dlp
+from flask import Flask, request, jsonify, render_template_string, redirect, Response, stream_with_context
 import requests
 import re
 import os
-import time
 from urllib.parse import quote
 
 app = Flask(__name__)
 
-# ==================== PREMIUM DARK-MODERN UI WITH ADSTERRA ADS ====================
+# ==================== PREMIUM DARK-MODERN UI ====================
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="hi">
@@ -113,7 +111,7 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
-        <!-- Direct .mp4 and .mp3 Links (No .html issue!) -->
+        <!-- Direct .mp4 and .mp3 Download Links -->
         <div class="quality-list">
             <a id="btn360" class="q-btn" href="#" onclick="saveHistory('360p Video')">
                 <span>360p (SD Download)</span>
@@ -188,7 +186,6 @@ HTML_PAGE = """
             document.getElementById("vidTitle").innerText = data.title || "Social Media Video";
             document.getElementById("vidMeta").innerText = `Duration: ${data.duration || 'N/A'} • Ready to Download`;
 
-            // हर बटन में सीधा .mp4 और .mp3 फाइल पाथ सेट किया गया है
             document.getElementById("btn360").href = data.q360;
             document.getElementById("btn720").href = data.q720;
             document.getElementById("btn1080").href = data.q1080;
@@ -258,7 +255,6 @@ BROWSER_HEADERS = {
 }
 
 def make_proxy_links(q360, q720, q1080, mp3):
-    """हर लिंक को /download/video_720p.mp4 और /download/audio_song.mp3 में बदलता है"""
     return {
         "q360": f"/download/video_360p.mp4?url={quote(q360, safe='')}",
         "q720": f"/download/video_720p.mp4?url={quote(q720, safe='')}",
@@ -266,179 +262,11 @@ def make_proxy_links(q360, q720, q1080, mp3):
         "mp3": f"/download/audio_song.mp3?url={quote(mp3, safe='')}"
     }
 
-# ==================== YOUTUBE STREAM RESOLVER (NO BOT ERROR) ====================
-def resolve_youtube_direct_url(vid_id, fmt):
-    yt_url = f"https://www.youtube.com/watch?v={vid_id}"
-
-    # 1. OceanSaver Cloud Converter (Direct MP4 / MP3 binary link)
+# ==================== MULTI-API FAIL-PROOF EXTRACTOR ====================
+def fetch_from_apis(url):
+    # 1. Try VKR Downloader API
     try:
-        init_res = requests.get(
-            "https://p.oceansaver.in/ajax/download.php",
-            params={"format": fmt, "url": yt_url, "api": "dfcb6d76f2f6a9894gjkege8a4ab232222"},
-            headers=BROWSER_HEADERS,
-            timeout=8
-        ).json()
-        if init_res.get("success") and init_res.get("id"):
-            task_id = init_res["id"]
-            for _ in range(12):
-                time.sleep(1.2)
-                prog = requests.get(
-                    f"https://p.oceansaver.in/ajax/progress.php?id={task_id}",
-                    headers=BROWSER_HEADERS,
-                    timeout=6
-                ).json()
-                if prog.get("download_url"):
-                    return prog["download_url"]
-    except Exception:
-        pass
-
-    # 2. Piped Public APIs
-    piped_hosts = [
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi.tokhmi.xyz",
-        "https://pipedapi.moomoo.me"
-    ]
-    for host in piped_hosts:
-        try:
-            r = requests.get(f"{host}/streams/{vid_id}", headers=BROWSER_HEADERS, timeout=7)
-            if r.status_code == 200:
-                data = r.json()
-                if fmt == "mp3" and data.get("audioStreams"):
-                    return data["audioStreams"][0].get("url")
-                for s in data.get("videoStreams", []):
-                    if s.get("videoOnly") is False and s.get("url"):
-                        return s.get("url")
-        except Exception:
-            pass
-
-    # 3. VKR Public API
-    try:
-        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={yt_url}", timeout=8)
-        if r.status_code == 200:
-            downloads = r.json().get("data", {}).get("downloads", [])
-            for item in downloads:
-                u = item.get("url")
-                ext = str(item.get("extension", "")).lower()
-                if fmt == "mp3" and ("mp3" in ext or "m4a" in ext):
-                    return u
-                elif fmt != "mp3" and u:
-                    return u
-    except Exception:
-        pass
-
-    return None
-
-def youtube_smart_extract(url):
-    match = re.search(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|shorts/|embed/))([0-9A-Za-z_-]{11})", url)
-    if not match:
-        return None
-    vid_id = match.group(1)
-
-    title = "YouTube Video"
-    thumb = f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
-
-    try:
-        oem = requests.get(f"https://noembed.com/embed?url=https://www.youtube.com/watch?v={vid_id}", timeout=5)
-        if oem.status_code == 200:
-            title = oem.json().get("title", title)
-    except Exception:
-        pass
-
-    return {
-        "title": title,
-        "thumbnail": thumb,
-        "duration": "YouTube HD • MP3",
-        "q360": f"/download/video_360p.mp4?yt_id={vid_id}&f=360",
-        "q720": f"/download/video_720p.mp4?yt_id={vid_id}&f=720",
-        "q1080": f"/download/video_1080p.mp4?yt_id={vid_id}&f=1080",
-        "mp3": f"/download/audio_song.mp3?yt_id={vid_id}&f=mp3"
-    }
-
-# ==================== DIRECT .MP4 & .MP3 STREAMING ROUTE ====================
-@app.route("/download/<filename>")
-def download_file(filename):
-    target_url = request.args.get("url")
-    yt_id = request.args.get("yt_id")
-    fmt = request.args.get("f", "720")
-
-    if yt_id and not target_url:
-        target_url = resolve_youtube_direct_url(yt_id, fmt)
-
-    if not target_url:
-        return "File stream not available", 404
-
-    # सख्त MIME Type ताकि Android ऐप कभी भी .html न दिखाए
-    if filename.endswith(".mp3"):
-        mime_type = "audio/mpeg"
-    else:
-        mime_type = "video/mp4"
-
-    try:
-        req = requests.get(target_url, stream=True, headers=BROWSER_HEADERS, timeout=25, allow_redirects=True)
-        headers = {
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Type": mime_type
-        }
-        if req.headers.get("Content-Length"):
-            headers["Content-Length"] = req.headers.get("Content-Length")
-
-        return Response(
-            stream_with_context(req.iter_content(chunk_size=512 * 1024)),
-            headers=headers,
-            content_type=mime_type
-        )
-    except Exception as e:
-        return f"Download error: {str(e)}", 500
-
-# ==================== INSTAGRAM & UNIVERSAL FALLBACKS ====================
-def instagram_fallback(url):
-    match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
-    if not match:
-        return None
-    shortcode = match.group(1)
-
-    # 1. Instagram Embed Captioned Page
-    try:
-        embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
-        r = requests.get(embed_url, headers=BROWSER_HEADERS, timeout=8)
-        v_match = re.search(r'"video_url":"([^"]+)"', r.text)
-        if v_match:
-            video_url = v_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/')
-            t_match = re.search(r'"display_url":"([^"]+)"', r.text)
-            thumb = t_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/') if t_match else None
-            links = make_proxy_links(video_url, video_url, video_url, video_url)
-            return {
-                "title": f"Instagram Reel ({shortcode})",
-                "thumbnail": thumb,
-                "duration": "Instagram Reel",
-                **links
-            }
-    except Exception:
-        pass
-
-    # 2. ddinstagram / kkinstagram OpenGraph
-    for domain in ["https://www.ddinstagram.com", "https://kkinstagram.com"]:
-        try:
-            r = requests.get(f"{domain}/reel/{shortcode}", headers={"User-Agent": "TelegramBot (like TwitterBot)"}, timeout=8)
-            og_vid = re.search(r'<meta property="og:video" content="([^"]+)"', r.text)
-            if og_vid:
-                video_url = og_vid.group(1).replace("&amp;", "&")
-                og_img = re.search(r'<meta property="og:image" content="([^"]+)"', r.text)
-                thumb = og_img.group(1).replace("&amp;", "&") if og_img else None
-                links = make_proxy_links(video_url, video_url, video_url, video_url)
-                return {
-                    "title": f"Instagram Reel ({shortcode})",
-                    "thumbnail": thumb,
-                    "duration": "Instagram Reel",
-                    **links
-                }
-        except Exception:
-            pass
-    return None
-
-def universal_api_fallback(url):
-    try:
-        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=8)
+        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=7)
         if r.status_code == 200:
             d = r.json().get("data", {})
             downloads = [x for x in d.get("downloads", []) if x.get("url")]
@@ -462,7 +290,53 @@ def universal_api_fallback(url):
                 }
     except Exception:
         pass
+
+    # 2. Try Cobalt API (Universal Fast Downloader)
+    try:
+        payload = {"url": url, "vQuality": "720"}
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        r = requests.post("https://co.wuk.sh/api/json", json=payload, headers=headers, timeout=8)
+        if r.status_code == 200:
+            res_data = r.json()
+            if res_data.get("status") == "redirect" or res_data.get("url"):
+                v_url = res_data.get("url")
+                links = make_proxy_links(v_url, v_url, v_url, v_url)
+                return {
+                    "title": "Downloaded Video",
+                    "thumbnail": "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Ready",
+                    "duration": "HD Video",
+                    **links
+                }
+    except Exception:
+        pass
+
     return None
+
+# ==================== DIRECT .MP4 & .MP3 STREAMING ROUTE ====================
+@app.route("/download/<filename>")
+def download_file(filename):
+    target_url = request.args.get("url")
+    if not target_url:
+        return "File stream not available", 404
+
+    mime_type = "audio/mpeg" if filename.endswith(".mp3") else "video/mp4"
+
+    try:
+        req = requests.get(target_url, stream=True, headers=BROWSER_HEADERS, timeout=25, allow_redirects=True)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": mime_type
+        }
+        if req.headers.get("Content-Length"):
+            headers["Content-Length"] = req.headers.get("Content-Length")
+
+        return Response(
+            stream_with_context(req.iter_content(chunk_size=512 * 1024)),
+            headers=headers,
+            content_type=mime_type
+        )
+    except Exception as e:
+        return redirect(target_url)
 
 # ==================== MAIN ROUTES ====================
 @app.route("/")
@@ -476,84 +350,12 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # YouTube लिंक के लिए तुरंत बिना बॉट एरर वाला इंजन चलाएं
-    if ("youtube.com" in url or "youtu.be" in url) and not os.path.exists("cookies.txt"):
-        yt_data = youtube_smart_extract(url)
-        if yt_data:
-            return jsonify(yt_data)
+    # Multi-API Fallback Engine (Works for Instagram, YouTube & Facebook instantly)
+    api_data = fetch_from_apis(url)
+    if api_data:
+        return jsonify(api_data)
 
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "nocheckcertificate": True,
-        "http_headers": BROWSER_HEADERS
-    }
-
-    if os.path.exists("cookies.txt"):
-        ydl_opts["cookiefile"] = "cookies.txt"
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            formats = info.get("formats", [])
-            best_video = info.get("url")
-            q360, q720, q1080, mp3_url = None, None, None, None
-
-            for f in formats:
-                f_url = f.get("url")
-                if not f_url:
-                    continue
-                height = f.get("height") or 0
-                vcodec = f.get("vcodec", "none")
-                acodec = f.get("acodec", "none")
-
-                if vcodec == "none" and acodec != "none":
-                    mp3_url = f_url
-                if vcodec != "none":
-                    best_video = f_url
-                    if height <= 480:
-                        q360 = f_url
-                    elif height <= 720:
-                        q720 = f_url
-                    elif height >= 1080:
-                        q1080 = f_url
-
-            if not best_video:
-                raise Exception("No direct video stream found")
-
-            raw_duration = info.get("duration")
-            duration_str = f"{int(float(raw_duration)) // 60}:{int(float(raw_duration)) % 60:02d}" if raw_duration else "HD Video"
-
-            links = make_proxy_links(
-                q360 or best_video,
-                q720 or best_video,
-                q1080 or best_video,
-                mp3_url or best_video
-            )
-
-            return jsonify({
-                "title": info.get("title", "Social Media Video"),
-                "thumbnail": info.get("thumbnail"),
-                "duration": duration_str,
-                **links
-            })
-    except Exception as e:
-        if "instagram.com" in url:
-            ig_data = instagram_fallback(url)
-            if ig_data:
-                return jsonify(ig_data)
-
-        if "youtube.com" in url or "youtu.be" in url:
-            yt_data = youtube_smart_extract(url)
-            if yt_data:
-                return jsonify(yt_data)
-
-        uni_data = universal_api_fallback(url)
-        if uni_data:
-            return jsonify(uni_data)
-
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"error": "Could not extract media. Please check the link and try again."}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8082)
