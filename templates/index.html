@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>InstaSave Pro</title>
+    <style>
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #0b0713;
+            color: #fff;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        /* ── App Shell ── */
+        .shell {
+            width: 100%;
+            max-width: 420px;
+            background: radial-gradient(circle at top, #1a0e2e 0%, #0d0914 70%);
+            min-height: 100vh;
+            padding: 20px 16px 24px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* ── Top Bar ── */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            min-height: 32px;
+        }
+
+        .back-btn {
+            display: none;
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.14);
+            color: #d1c6e6;
+            padding: 7px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .settings-lbl {
+            font-size: 12px;
+            color: #786d8a;
+            margin-left: auto;
+        }
+
+        /* ── Brand ── */
+        .brand {
+            text-align: center;
+            margin: 6px 0 22px;
+        }
+
+        .brand h1 {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(90deg, #b56eff 0%, #ff5e7e 50%, #ff9a52 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .brand p {
+            font-size: 12px;
+            color: #9e96b0;
+            margin-top: 5px;
+        }
+
+        /* ── Neon Card ── */
+        .neon-card {
+            background: rgba(25, 17, 40, 0.9);
+            border: 1.5px solid rgba(217, 70, 239, 0.3);
+            border-radius: 20px;
+            padding: 18px;
+            box-shadow: 0 0 30px rgba(181, 110, 255, 0.1);
+        }
+
+        /* ── Input ── */
+        .input-row {
+            display: flex;
+            align-items: center;
+            background: #120d1d;
+            border: 1px solid #352849;
+            border-radius: 14px;
+            padding: 6px 6px 6px 14px;
+        }
+
+        .input-row input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .input-row input::placeholder { color: #786d8a; }
+
+        .paste-btn {
+            background: rgba(181, 110, 255, 0.15);
+            border: 1px solid #b56eff;
+            color: #e2c6ff;
+            padding: 9px 14px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        /* ── Download Button ── */
+        .dl-btn {
+            width: 100%;
+            margin-top: 16px;
+            padding: 15px;
+            border: none;
+            border-radius: 14px;
+            background: linear-gradient(90deg, #7c3aed, #ec4899, #f97316);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 6px 22px rgba(236, 72, 153, 0.32);
+        }
+
+        /* ── Loader ── */
+        #loader {
+            display: none;
+            text-align: center;
+            margin: 28px 0;
+        }
+
+        .spinner {
+            width: 38px;
+            height: 38px;
+            border: 4px solid #2b233d;
+            border-top-color: #ec4899;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #loader p {
+            font-size: 13px;
+            color: #d1c6e6;
+        }
+
+        /* ── History Button ── */
+        .history-wrap {
+            display: flex;
+            justify-content: center;
+            margin: 26px 0;
+        }
+
+        .history-btn {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(28, 20, 44, 0.95);
+            border: 1px solid #382c4e;
+            padding: 12px 26px;
+            border-radius: 16px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        .hist-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(236, 72, 153, 0.14);
+            border: 1px solid #ec4899;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .hist-label { text-align: left; }
+        .hist-label strong { font-size: 14px; display: block; }
+        .hist-label span { font-size: 12px; color: #9e96b0; }
+
+        /* ── Ad Slot ── */
+        .ad-slot {
+            background: rgba(20, 15, 30, 0.92);
+            border: 1px solid #2b233d;
+            border-radius: 14px;
+            padding: 12px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ad-tag {
+            position: absolute;
+            top: 4px;
+            right: 6px;
+            background: #2b233d;
+            color: #9e96b0;
+            font-size: 8px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            z-index: 10;
+        }
+
+        /* ── Quality Page ── */
+        #qualityPage {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+            gap: 12px;
+        }
+
+        .video-card {
+            background: #130e20;
+            border: 1px solid #2e2442;
+            border-radius: 16px;
+            padding: 12px;
+        }
+
+        .video-card img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 12px;
+            background: #0d0914;
+        }
+
+        .vid-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-top: 9px;
+            color: #e2dcf0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .vid-meta {
+            font-size: 11px;
+            color: #8c829e;
+            margin-top: 3px;
+        }
+
+        .quality-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .q-btn {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(25, 18, 42, 0.97);
+            border: 1.5px solid rgba(181, 110, 255, 0.38);
+            color: #fff;
+            padding: 13px 16px;
+            border-radius: 14px;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 700;
+            transition: border-color 0.2s;
+        }
+
+        .q-btn:active { border-color: #b56eff; }
+
+        .q-badge {
+            font-size: 11px;
+            background: rgba(255,255,255,0.09);
+            padding: 3px 9px;
+            border-radius: 6px;
+            color: #d1c6e6;
+        }
+
+        .mp3-btn {
+            background: linear-gradient(90deg, #ff4b2b, #ff7b1c);
+            border-color: transparent;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 4px 16px rgba(255,75,43,0.32);
+        }
+
+        /* ── History Page ── */
+        #historyPage {
+            display: none;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        #historyPage h3 {
+            font-size: 16px;
+            color: #e2c6ff;
+            margin-bottom: 14px;
+        }
+
+        .history-item {
+            background: #130e20;
+            border: 1px solid #2b233d;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .history-item .h-info { max-width: 70%; }
+        .history-item .h-title {
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item .h-meta {
+            font-size: 11px;
+            color: #ff5e7e;
+            margin-top: 3px;
+        }
+
+        .history-item a {
+            background: #7c3aed;
+            color: #fff;
+            text-decoration: none;
+            padding: 7px 13px;
+            border-radius: 9px;
+            font-size: 12px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .empty-msg {
+            font-size: 14px;
+            color: #8c829e;
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        /* ── Spacer ── */
+        .spacer { flex: 1; }
+    </style>
+</head>
+<body>
+
+<div class="shell">
+
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <button class="back-btn" id="backBtn" onclick="goHome()">⬅ Back</button>
+        <span class="settings-lbl">⚙ Settings</span>
+    </div>
+
+    <!-- ════════════════════════════════
+         HOME PAGE
+         ════════════════════════════════ -->
+    <div id="homePage" style="display:flex; flex-direction:column; flex:1;">
+
+        <div class="brand">
+            <h1>⚡ InstaSave Pro</h1>
+            <p>High-Speed Video &amp; MP3 Downloader</p>
+        </div>
+
+        <div class="neon-card">
+            <div class="input-row">
+                <input type="url" id="videoUrl"
+                       placeholder="Instagram, FB या YouTube लिंक यहाँ पेस्ट करें...">
+                <button class="paste-btn" onclick="pasteClipboard()">📋 Paste</button>
+            </div>
+            <button class="dl-btn" onclick="fetchQualities()">⬇ Download Video</button>
+        </div>
+
+        <!-- Loader -->
+        <div id="loader">
+            <div class="spinner"></div>
+            <p>वीडियो क्वालिटी और MP3 तैयार हो रहे हैं...</p>
+        </div>
+
+        <!-- History Button -->
+        <div class="history-wrap">
+            <div class="history-btn" onclick="openHistory()">
+                <div class="hist-icon">🕒</div>
+                <div class="hist-label">
+                    <strong>Downloads</strong>
+                    <span>(History)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="spacer"></div>
+
+        <!-- AD SLOT 1 — Bottom Banner 320×50 -->
+        <div class="ad-slot">
+            <span class="ad-tag">AD</span>
+            <script>
+                atOptions = {
+                    'key'    : 'd4bfaea664a0c393e4f83f2dec735528',
+                    'format' : 'iframe',
+                    'height' : 50,
+                    'width'  : 320,
+                    'params' : {}
+                };
+            </script>
+            <script src="https://bicea.org/22/d4bfaea664a0c393e4f83f2dec735528"></script>
+        </div>
+
+    </div><!-- /homePage -->
+
+
+    <!-- ════════════════════════════════
+         QUALITY SELECTION PAGE
+         ════════════════════════════════ -->
+    <div id="qualityPage">
+
+        <!-- AD SLOT 2 — Quality Page Top -->
+        <div class="ad-slot">
+            <span class="ad-tag">AD</span>
+            <script async data-cfasync="false"
+                    src="https://bicea.org/21/00dd1cba1d9aecb77a38116e26fe5f22"></script>
+            <div id="container-00dd1cba1d9aecb77a38116e26fe5f22"></div>
+        </div>
+
+        <!-- Video Preview Card -->
+        <div class="video-card">
+            <img id="thumbImg" src="" alt="Thumbnail"
+                 onerror="this.src='https://via.placeholder.com/400x150/130e20/b56eff?text=Video+Preview'">
+            <div class="vid-title" id="vidTitle">Video Title</div>
+            <div class="vid-meta"  id="vidMeta">Ready to Save</div>
+        </div>
+
+        <!-- Quality Buttons -->
+        <div class="quality-list">
+            <a id="btn360"  class="q-btn" href="#" target="_blank"
+               onclick="saveHistory('360p Video')">
+                <span>360p</span>
+                <span class="q-badge">SD ⬇</span>
+            </a>
+            <a id="btn720"  class="q-btn" href="#" target="_blank"
+               onclick="saveHistory('720p HD')">
+                <span>720p</span>
+                <span class="q-badge">HD ⬇</span>
+            </a>
+            <a id="btn1080" class="q-btn" href="#" target="_blank"
+               onclick="saveHistory('1080p Full HD')">
+                <span>1080p <span style="color:#ff5e7e;">(FHD)</span></span>
+                <span class="q-badge">FHD ⬇</span>
+            </a>
+            <a id="btnMp3"  class="q-btn mp3-btn" href="#" target="_blank"
+               onclick="saveHistory('MP3 Audio')">
+                <span>🎵 Download MP3 (Audio/Song)</span>
+            </a>
+        </div>
+
+        <!-- AD SLOT 3 — Quality Page Bottom 300×250 -->
+        <div class="ad-slot">
+            <span class="ad-tag">AD</span>
+            <script>
+                atOptions = {
+                    'key'    : '21465589bfa2a5f9c90e8aa8fd4e55c3',
+                    'format' : 'iframe',
+                    'height' : 250,
+                    'width'  : 300,
+                    'params' : {}
+                };
+            </script>
+            <script src="https://bicea.org/22/21465589bfa2a5f9c90e8aa8fd4e55c3"></script>
+        </div>
+
+    </div><!-- /qualityPage -->
+
+
+    <!-- ════════════════════════════════
+         DOWNLOAD HISTORY PAGE
+         ════════════════════════════════ -->
+    <div id="historyPage">
+        <h3>📂 Downloaded History</h3>
+        <div id="historyList"></div>
+    </div>
+
+</div><!-- /shell -->
+
+
+<!-- ════════════════════════════════
+     JAVASCRIPT
+     ════════════════════════════════ -->
+<script>
+    let currentVideo = {};
+
+    /* ── Paste from clipboard ── */
+    async function pasteClipboard() {
+        try {
+            const text = await navigator.clipboard.readText();
+            document.getElementById("videoUrl").value = text;
+        } catch {
+            alert("बॉक्स में उंगली दबाकर लिंक पेस्ट करें।");
+        }
+    }
+
+    /* ── Fetch video qualities ── */
+    async function fetchQualities() {
+        const url = document.getElementById("videoUrl").value.trim();
+        if (!url) {
+            alert("कृपया पहले कोई वीडियो लिंक पेस्ट करें!");
+            return;
+        }
+
+        document.getElementById("loader").style.display = "block";
+        document.getElementById("homePage").querySelector(".neon-card")
+                .querySelector(".dl-btn").disabled = true;
+
+        try {
+            const res = await fetch("/api/extract", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url })
+            });
+
+            const data = await res.json();
+            document.getElementById("loader").style.display = "none";
+            document.getElementById("homePage").querySelector(".dl-btn").disabled = false;
+
+            if (data.error) {
+                alert("❌ Error: " + data.error);
+                return;
+            }
+
+            currentVideo = data;
+
+            /* Update preview */
+            document.getElementById("thumbImg").src =
+                data.thumbnail || "https://via.placeholder.com/400x150/130e20/b56eff?text=Video+Preview";
+            document.getElementById("vidTitle").innerText =
+                data.title || "Social Media Video";
+            document.getElementById("vidMeta").innerText =
+                `Duration: ${data.duration || "HD"} • Save करने के लिए quality चुनें`;
+
+            /* Set download links */
+            document.getElementById("btn360").href  = data.q360  || "#";
+            document.getElementById("btn720").href  = data.q720  || "#";
+            document.getElementById("btn1080").href = data.q1080 || "#";
+            document.getElementById("btnMp3").href  = data.mp3   || "#";
+
+            showPage("quality");
+
+        } catch (err) {
+            document.getElementById("loader").style.display = "none";
+            document.getElementById("homePage").querySelector(".dl-btn").disabled = false;
+            alert("सर्वर से connect नहीं हो पाया: " + err.message);
+        }
+    }
+
+    /* ── Save to history ── */
+    function saveHistory(typeLabel) {
+        let hist = JSON.parse(localStorage.getItem("dlHistory") || "[]");
+        hist.unshift({
+            title: currentVideo.title || "Saved Media",
+            type:  typeLabel,
+            link:  currentVideo.best_video || "#",
+            time:  new Date().toLocaleTimeString("hi-IN")
+        });
+        localStorage.setItem("dlHistory", JSON.stringify(hist.slice(0, 25)));
+    }
+
+    /* ── Open history ── */
+    function openHistory() {
+        const hist = JSON.parse(localStorage.getItem("dlHistory") || "[]");
+        const container = document.getElementById("historyList");
+
+        if (hist.length === 0) {
+            container.innerHTML =
+                '<p class="empty-msg">अभी तक कोई download history नहीं है।</p>';
+        } else {
+            container.innerHTML = hist.map(item => `
+                <div class="history-item">
+                    <div class="h-info">
+                        <div class="h-title">${item.title}</div>
+                        <div class="h-meta">${item.type} • ${item.time}</div>
+                    </div>
+                    <a href="${item.link}" target="_blank">Open</a>
+                </div>
+            `).join("");
+        }
+
+        showPage("history");
+    }
+
+    /* ── Page navigation ── */
+    function showPage(page) {
+        document.getElementById("homePage").style.display    = "none";
+        document.getElementById("qualityPage").style.display = "none";
+        document.getElementById("historyPage").style.display = "none";
+        document.getElementById("backBtn").style.display     = "inline-block";
+
+        if (page === "home") {
+            document.getElementById("homePage").style.display    = "flex";
+            document.getElementById("backBtn").style.display     = "none";
+        } else if (page === "quality") {
+            document.getElementById("qualityPage").style.display = "flex";
+        } else if (page === "history") {
+            document.getElementById("historyPage").style.display = "flex";
+        }
+    }
+
+    function goHome() { showPage("home"); }
+</script>
+
+</body>
+</html>
