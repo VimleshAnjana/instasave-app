@@ -1,12 +1,12 @@
-from flask import Flask, request, jsonify, render_template_string, Response, stream_with_context, redirect
+from flask import Flask, request, jsonify, render_template_string, redirect, Response
+import yt_dlp
 import requests
 import re
 import os
-from urllib.parse import quote
 
 app = Flask(__name__)
 
-# ==================== PREMIUM DARK-MODERN UI ====================
+# ==================== PREMIUM DARK-MODERN UI WITH ADSTERRA ADS ====================
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="hi">
@@ -43,7 +43,7 @@ HTML_PAGE = """
         .video-title { font-size: 13px; font-weight: 600; margin-top: 8px; color: #e2dcf0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .video-meta { font-size: 11px; color: #8c829e; margin-top: 3px; }
         .quality-list { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 14px; }
-        .q-btn { display: flex; justify-content: space-between; align-items: center; background: rgba(28, 21, 43, 0.95); border: 1.5px solid rgba(181, 110, 255, 0.4); color: #fff; padding: 12px 15px; border-radius: 14px; text-decoration: none; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .q-btn { display: flex; justify-content: space-between; align-items: center; background: rgba(28, 21, 43, 0.95); border: 1.5px solid rgba(181, 110, 255, 0.4); color: #fff; padding: 12px 15px; border-radius: 14px; text-decoration: none; font-size: 15px; font-weight: 700; }
         .q-badge { font-size: 11px; background: rgba(255,255,255,0.1); padding: 3px 8px; border-radius: 6px; color: #d1c6e6; }
         .mp3-btn { background: linear-gradient(90deg, #ff4b2b, #ff7b1c); border: none; justify-content: center; gap: 10px; box-shadow: 0 4px 15px rgba(255, 75, 43, 0.35); }
         .history-item { background: #161122; border: 1px solid #2b233d; border-radius: 12px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
@@ -112,20 +112,20 @@ HTML_PAGE = """
         </div>
 
         <div class="quality-list">
-            <a id="btn360" class="q-btn" href="#" onclick="saveHistory('360p Video')">
-                <span>360p (SD Download)</span>
-                <span class="q-badge">⬇ .MP4</span>
+            <a id="btn360" class="q-btn" href="#" target="_blank" onclick="saveHistory('360p Video')">
+                <span>360p</span>
+                <span class="q-badge">SD ⬇</span>
             </a>
-            <a id="btn720" class="q-btn" href="#" onclick="saveHistory('720p HD')">
-                <span>720p (HD Download)</span>
-                <span class="q-badge">⬇ .MP4</span>
+            <a id="btn720" class="q-btn" href="#" target="_blank" onclick="saveHistory('720p HD')">
+                <span>720p</span>
+                <span class="q-badge">HD ⬇</span>
             </a>
-            <a id="btn1080" class="q-btn" href="#" onclick="saveHistory('1080p Full HD')">
-                <span>1080p <span style="color:#ff5e7e;">(Full HD)</span></span>
-                <span class="q-badge">⬇ .MP4</span>
+            <a id="btn1080" class="q-btn" href="#" target="_blank" onclick="saveHistory('1080p Full HD')">
+                <span>1080p <span style="color:#ff5e7e;">(HD)</span></span>
+                <span class="q-badge">FHD ⬇</span>
             </a>
-            <a id="btnMp3" class="q-btn mp3-btn" href="#" onclick="saveHistory('MP3 Audio Song')">
-                <span>🎵 Download MP3 Song (.MP3)</span>
+            <a id="btnMp3" class="q-btn mp3-btn" href="#" target="_blank" onclick="saveHistory('MP3 Audio Song')">
+                <span>🎵 Download MP3 (Audio/Song)</span>
             </a>
         </div>
 
@@ -183,7 +183,7 @@ HTML_PAGE = """
             currentVideoData = data;
             document.getElementById("thumbImg").src = data.thumbnail || "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Preview";
             document.getElementById("vidTitle").innerText = data.title || "Social Media Video";
-            document.getElementById("vidMeta").innerText = `Duration: ${data.duration || 'N/A'} • Ready to Download`;
+            document.getElementById("vidMeta").innerText = `Duration: ${data.duration || 'N/A'} • Ready to Save`;
 
             document.getElementById("btn360").href = data.q360;
             document.getElementById("btn720").href = data.q720;
@@ -206,7 +206,7 @@ HTML_PAGE = """
         history.unshift({
             title: currentVideoData.title || "Saved Media",
             type: typeLabel,
-            link: currentVideoData.q720 || "#",
+            link: currentVideoData.best_video,
             time: new Date().toLocaleTimeString()
         });
         localStorage.setItem("instaSaveHistory", JSON.stringify(history.slice(0, 20)));
@@ -230,7 +230,7 @@ HTML_PAGE = """
                     <div style="font-size:13px; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${item.title}</div>
                     <div style="font-size:11px; color:#ff5e7e;">${item.type} • ${item.time}</div>
                 </div>
-                <a href="${item.link}">Download</a>
+                <a href="${item.link}" target="_blank">Open</a>
             </div>
         `).join("");
     }
@@ -247,119 +247,39 @@ HTML_PAGE = """
 </html>
 """
 
-BROWSER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Accept": "*/*",
-    "Accept-Language": "en-US,en;q=0.9"
-}
-
-def make_proxy_links(video_url, audio_url=None):
-    if not audio_url:
-        audio_url = video_url
-    return {
-        "q360": f"/download/video_360p.mp4?url={quote(video_url, safe='')}",
-        "q720": f"/download/video_720p.mp4?url={quote(video_url, safe='')}",
-        "q1080": f"/download/video_1080p.mp4?url={quote(video_url, safe='')}",
-        "mp3": f"/download/audio_song.mp3?url={quote(audio_url, safe='')}"
-    }
-
-# ==================== PUBLIC MULTI-API BRIDGE ====================
-def extract_media_info(url):
-    # 1. Cobalt API Bridge
+# ==================== ORIGINAL WORKING API FALLBACK ====================
+def universal_api_fallback(url):
     try:
-        payload = {"url": url}
-        headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
-        r = requests.post("https://api.cobalt.tools/api/json", json=payload, headers=headers, timeout=8)
-        if r.status_code == 200:
-            res_data = r.json()
-            v_url = res_data.get("url") or res_data.get("picker", [{}])[0].get("url")
-            if v_url:
-                links = make_proxy_links(v_url)
-                return {
-                    "title": res_data.get("filename", "Social Media Video"),
-                    "thumbnail": "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Ready",
-                    "duration": "HD Ready",
-                    **links
-                }
-    except Exception:
-        pass
-
-    # 2. SaveFrom / SnapSave Public API Fallback
-    try:
-        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=7)
+        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=8)
         if r.status_code == 200:
             d = r.json().get("data", {})
-            downloads = [x for x in d.get("downloads", []) if x.get("url")]
+            downloads = d.get("downloads", [])
             if downloads:
                 best_v = downloads[0].get("url")
-                audio_u = best_v
+                q360, q720, q1080, mp3_u = best_v, best_v, best_v, best_v
                 for item in downloads:
                     u = item.get("url")
                     ext = str(item.get("extension", "")).lower()
-                    if "mp3" in ext or "m4a" in ext:
-                        audio_u = u
-                        break
-                links = make_proxy_links(best_v, audio_u)
+                    res = str(item.get("format_id", "")).lower()
+                    if not u: continue
+                    if "mp3" in ext or "m4a" in ext or "audio" in res: mp3_u = u
+                    elif "360" in res: q360 = u
+                    elif "720" in res: q720 = u
+                    elif "1080" in res: q1080 = u
                 return {
                     "title": d.get("title", "Social Media Video"),
                     "thumbnail": d.get("thumbnail"),
                     "duration": "HD Ready",
-                    **links
+                    "best_video": best_v,
+                    "q360": q360,
+                    "q720": q720,
+                    "q1080": q1080,
+                    "mp3": mp3_u
                 }
     except Exception:
         pass
-
-    # 3. Direct Embed / OpenGraph Scraper (100% Works for Instagram/Facebook)
-    try:
-        if "instagram.com" in url:
-            shortcode_match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
-            if shortcode_match:
-                sc = shortcode_match.group(1)
-                embed_r = requests.get(f"https://www.instagram.com/p/{sc}/embed/captioned/", headers=BROWSER_HEADERS, timeout=6)
-                v_match = re.search(r'"video_url":"([^"]+)"', embed_r.text)
-                if v_match:
-                    v_url = v_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/')
-                    t_match = re.search(r'"display_url":"([^"]+)"', embed_r.text)
-                    thumb = t_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/') if t_match else None
-                    links = make_proxy_links(v_url)
-                    return {
-                        "title": f"Instagram Reel ({sc})",
-                        "thumbnail": thumb,
-                        "duration": "Instagram Video",
-                        **links
-                    }
-    except Exception:
-        pass
-
     return None
 
-# ==================== STREAMING ROUTE ====================
-@app.route("/download/<filename>")
-def download_file(filename):
-    target_url = request.args.get("url")
-    if not target_url:
-        return "File stream not available", 404
-
-    mime_type = "audio/mpeg" if filename.endswith(".mp3") else "video/mp4"
-
-    try:
-        req = requests.get(target_url, stream=True, headers=BROWSER_HEADERS, timeout=25, allow_redirects=True)
-        headers = {
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Content-Type": mime_type
-        }
-        if req.headers.get("Content-Length"):
-            headers["Content-Length"] = req.headers.get("Content-Length")
-
-        return Response(
-            stream_with_context(req.iter_content(chunk_size=512 * 1024)),
-            headers=headers,
-            content_type=mime_type
-        )
-    except Exception as e:
-        return redirect(target_url)
-
-# ==================== MAIN ROUTES ====================
 @app.route("/")
 def index():
     return render_template_string(HTML_PAGE)
@@ -371,11 +291,54 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    media_data = extract_media_info(url)
-    if media_data:
-        return jsonify(media_data)
+    # 1. First try Original Universal API
+    uni = universal_api_fallback(url)
+    if uni:
+        return jsonify(uni)
 
-    return jsonify({"error": "Could not extract media. Please check the link and try again."}), 500
+    # 2. Fallback to yt-dlp
+    ydl_opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "skip_download": True,
+        "nocheckcertificate": True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            formats = info.get("formats", [])
+            best_video = info.get("url")
+            q360, q720, q1080, mp3_url = best_video, best_video, best_video, best_video
+
+            for f in formats:
+                f_url = f.get("url")
+                if not f_url: continue
+                height = f.get("height") or 0
+                vcodec = f.get("vcodec", "none")
+                acodec = f.get("acodec", "none")
+
+                if vcodec == "none" and acodec != "none": mp3_url = f_url
+                if vcodec != "none":
+                    if height <= 480: q360 = f_url
+                    elif height <= 720: q720 = f_url
+                    elif height >= 1080: q1080 = f_url
+
+            raw_duration = info.get("duration")
+            duration_str = f"{int(float(raw_duration)) // 60}:{int(float(raw_duration)) % 60:02d}" if raw_duration else "HD Video"
+
+            return jsonify({
+                "title": info.get("title", "Social Media Video"),
+                "thumbnail": info.get("thumbnail"),
+                "duration": duration_str,
+                "best_video": best_video,
+                "q360": q360,
+                "q720": q720,
+                "q1080": q1080,
+                "mp3": mp3_url
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8082)
