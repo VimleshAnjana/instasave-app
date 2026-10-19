@@ -353,7 +353,7 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
-        <!-- Quality Buttons (No Ads in between) -->
+        <!-- Quality Buttons -->
         <div class="quality-list">
             <a id="btn360" class="q-btn" href="#" target="_blank" onclick="saveHistory('360p Video')">
                 <span>360p</span>
@@ -497,7 +497,7 @@ HTML_PAGE = """
 </html>
 """
 
-# ==================== PYTHON SERVER (YT-DLP ENGINE) ====================
+# ==================== PYTHON SERVER (YT-DLP ENGINE WITH BYPASS) ====================
 @app.route("/")
 def index():
     return render_template_string(HTML_PAGE)
@@ -509,18 +509,18 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # यहाँ हमने yt-dlp के ऑप्शंस को अपडेट कर दिया है ताकि Instagram ब्लॉक न करे
+    # यहाँ yt-dlp के ऑप्शंस को बॉट डिटेक्शन और साइन-इन एरर से बचाने के लिए अपडेट किया गया है
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "extractor_args": {
-            "instagram": {
-                "max_comments": [0]
-            }
+            "instagram": {"max_comments": [0]},
+            "youtube": {"player_client": ["android", "web"]}
         },
         "http_headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept-Language": "en-US,en;q=0.9"
         }
     }
 
@@ -556,7 +556,7 @@ def extract():
             duration_str = f"{duration_sec // 60}:{duration_sec % 60:02d}" if duration_sec else "Reel/Video"
 
             return jsonify({
-                "title": info.get("title", "Instagram / Social Video"),
+                "title": info.get("title", "Social Media Video"),
                 "thumbnail": info.get("thumbnail"),
                 "duration": duration_str,
                 "best_video": best_video,
@@ -567,7 +567,7 @@ def extract():
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-                
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8082)
+    
