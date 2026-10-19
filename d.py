@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, redirect
+from flask import Flask, request, jsonify, render_template_string, redirect, Response
 import yt_dlp
 import requests
 import re
@@ -111,21 +111,21 @@ HTML_PAGE = """
             <div class="video-meta" id="vidMeta">00:00 • HD Available</div>
         </div>
 
-        <!-- Direct Download Buttons (No Video Player Popup!) -->
+        <!-- Forced Direct Download Proxy Links -->
         <div class="quality-list">
-            <a id="btn360" class="q-btn" href="#" download target="_blank" onclick="saveHistory('360p Video')">
+            <a id="btn360" class="q-btn" href="#" onclick="triggerDownload(event, this.href, 'video_360p.mp4')">
                 <span>360p (SD Download)</span>
                 <span class="q-badge">⬇ Save</span>
             </a>
-            <a id="btn720" class="q-btn" href="#" download target="_blank" onclick="saveHistory('720p HD')">
+            <a id="btn720" class="q-btn" href="#" onclick="triggerDownload(event, this.href, 'video_720p.mp4')">
                 <span>720p (HD Download)</span>
                 <span class="q-badge">⬇ Save</span>
             </a>
-            <a id="btn1080" class="q-btn" href="#" download target="_blank" onclick="saveHistory('1080p Full HD')">
+            <a id="btn1080" class="q-btn" href="#" onclick="triggerDownload(event, this.href, 'video_1080p.mp4')">
                 <span>1080p <span style="color:#ff5e7e;">(Full HD)</span></span>
                 <span class="q-badge">⬇ Save</span>
             </a>
-            <a id="btnMp3" class="q-btn mp3-btn" href="#" download target="_blank" onclick="saveHistory('MP3 Audio Song')">
+            <a id="btnMp3" class="q-btn mp3-btn" href="#" onclick="triggerDownload(event, this.href, 'audio_song.mp3')">
                 <span>🎵 Download MP3 Song (Audio)</span>
             </a>
         </div>
@@ -156,6 +156,21 @@ HTML_PAGE = """
         } catch (e) {
             alert("बॉक्स में उंगली दबाकर लिंक पेस्ट करें।");
         }
+    }
+
+    function triggerDownload(event, rawUrl, filename) {
+        event.preventDefault();
+        saveHistory(filename.includes('mp3') ? 'MP3 Audio Song' : 'Video Download');
+        
+        // Proxy URL के जरिए सीधा डाउनलोड शुरू करना ताकि वीडियो प्ले न हो
+        const proxyUrl = `/api/download_proxy?url=${encodeURIComponent(rawUrl)}&name=${filename}`;
+        
+        const a = document.createElement('a');
+        a.href = proxyUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     async function fetchQualities() {
@@ -247,6 +262,25 @@ HTML_PAGE = """
 </body>
 </html>
 """
+
+# ==================== FORCED DOWNLOAD PROXY ROUTE ====================
+@app.route("/api/download_proxy")
+def download_proxy():
+    target_url = request.args.get("url")
+    filename = request.args.get("name", "download.mp4")
+    if not target_url:
+        return "No URL provided", 400
+    
+    try:
+        # सर्वर के जरिए फाइल को स्ट्रीम करके ब्राउज़र को फोर्स करेंगे कि वह डाउनलोड करे
+        req = requests.get(target_url, stream=True, timeout=15)
+        return Response(
+            req.iter_content(chunk_size=1024*1024),
+            content_type=req.headers.get("content-type", "application/octet-stream"),
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        return redirect(target_url)
 
 # ==================== BACKEND EXTRACTOR ====================
 def universal_api_fallback(url):
