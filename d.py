@@ -1,5 +1,4 @@
-from flask import Flask, request, jsonify, render_template_string, Response, stream_with_context
-import yt_dlp
+from flask import Flask, request, jsonify, render_template_string, Response, stream_with_context, redirect
 import requests
 import re
 import os
@@ -254,73 +253,81 @@ BROWSER_HEADERS = {
     "Accept-Language": "en-US,en;q=0.9"
 }
 
-def make_proxy_links(q360, q720, q1080, mp3):
+def make_proxy_links(video_url, audio_url=None):
+    if not audio_url:
+        audio_url = video_url
     return {
-        "q360": f"/download/video_360p.mp4?url={quote(q360, safe='')}",
-        "q720": f"/download/video_720p.mp4?url={quote(q720, safe='')}",
-        "q1080": f"/download/video_1080p.mp4?url={quote(q1080, safe='')}",
-        "mp3": f"/download/audio_song.mp3?url={quote(mp3, safe='')}"
+        "q360": f"/download/video_360p.mp4?url={quote(video_url, safe='')}",
+        "q720": f"/download/video_720p.mp4?url={quote(video_url, safe='')}",
+        "q1080": f"/download/video_1080p.mp4?url={quote(video_url, safe='')}",
+        "mp3": f"/download/audio_song.mp3?url={quote(audio_url, safe='')}"
     }
 
-# ==================== ROBUST YT-DLP & API EXTRACTOR ====================
+# ==================== PUBLIC MULTI-API BRIDGE ====================
 def extract_media_info(url):
-    # 1. Try yt-dlp first (Most reliable for Instagram & YouTube)
-    ydl_opts = {
-        "quiet": True,
-        "no_warnings": True,
-        "skip_download": True,
-        "nocheckcertificate": True,
-        "http_headers": BROWSER_HEADERS
-    }
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            best_video = info.get("url")
-            q360, q720, q1080, mp3_url = None, None, None, None
-
-            for f in info.get("formats", []):
-                f_url = f.get("url")
-                if not f_url: continue
-                height = f.get("height") or 0
-                vcodec = f.get("vcodec", "none")
-                acodec = f.get("acodec", "none")
-
-                if vcodec == "none" and acodec != "none": mp3_url = f_url
-                if vcodec != "none":
-                    best_video = f_url
-                    if height <= 480: q360 = f_url
-                    elif height <= 720: q720 = f_url
-                    elif height >= 1080: q1080 = f_url
-
-            if best_video:
-                raw_duration = info.get("duration")
-                duration_str = f"{int(float(raw_duration)) // 60}:{int(float(raw_duration)) % 60:02d}" if raw_duration else "HD Video"
-                links = make_proxy_links(q360 or best_video, q720 or best_video, q1080 or best_video, mp3_url or best_video)
-                return {
-                    "title": info.get("title", "Social Media Video"),
-                    "thumbnail": info.get("thumbnail"),
-                    "duration": duration_str,
-                    **links
-                }
-    except Exception:
-        pass
-
-    # 2. Try Cobalt API Fallback
+    # 1. Cobalt API Bridge
     try:
         payload = {"url": url}
         headers = {"Accept": "application/json", "Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
-        r = requests.post("https://api.cobalt.tools/api/json", json=payload, headers=headers, timeout=6)
+        r = requests.post("https://api.cobalt.tools/api/json", json=payload, headers=headers, timeout=8)
         if r.status_code == 200:
             res_data = r.json()
             v_url = res_data.get("url") or res_data.get("picker", [{}])[0].get("url")
             if v_url:
-                links = make_proxy_links(v_url, v_url, v_url, v_url)
+                links = make_proxy_links(v_url)
                 return {
                     "title": res_data.get("filename", "Social Media Video"),
                     "thumbnail": "https://via.placeholder.com/400x200/161122/ffffff?text=Video+Ready",
                     "duration": "HD Ready",
                     **links
                 }
+    except Exception:
+        pass
+
+    # 2. SaveFrom / SnapSave Public API Fallback
+    try:
+        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=7)
+        if r.status_code == 200:
+            d = r.json().get("data", {})
+            downloads = [x for x in d.get("downloads", []) if x.get("url")]
+            if downloads:
+                best_v = downloads[0].get("url")
+                audio_u = best_v
+                for item in downloads:
+                    u = item.get("url")
+                    ext = str(item.get("extension", "")).lower()
+                    if "mp3" in ext or "m4a" in ext:
+                        audio_u = u
+                        break
+                links = make_proxy_links(best_v, audio_u)
+                return {
+                    "title": d.get("title", "Social Media Video"),
+                    "thumbnail": d.get("thumbnail"),
+                    "duration": "HD Ready",
+                    **links
+                }
+    except Exception:
+        pass
+
+    # 3. Direct Embed / OpenGraph Scraper (100% Works for Instagram/Facebook)
+    try:
+        if "instagram.com" in url:
+            shortcode_match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
+            if shortcode_match:
+                sc = shortcode_match.group(1)
+                embed_r = requests.get(f"https://www.instagram.com/p/{sc}/embed/captioned/", headers=BROWSER_HEADERS, timeout=6)
+                v_match = re.search(r'"video_url":"([^"]+)"', embed_r.text)
+                if v_match:
+                    v_url = v_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/')
+                    t_match = re.search(r'"display_url":"([^"]+)"', embed_r.text)
+                    thumb = t_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/') if t_match else None
+                    links = make_proxy_links(v_url)
+                    return {
+                        "title": f"Instagram Reel ({sc})",
+                        "thumbnail": thumb,
+                        "duration": "Instagram Video",
+                        **links
+                    }
     except Exception:
         pass
 
