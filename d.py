@@ -481,18 +481,14 @@ HTML_PAGE = """
 
 # ==================== INSTAGRAM SMART FALLBACK ====================
 def instagram_fallback(url):
-    """अगर क्लाउड IP पर yt-dlp ब्लॉक हो जाए, तो सीधे Embed/Proxy से वीडियो निकालेगा"""
     match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
     if not match:
         return None
     shortcode = match.group(1)
 
-    # Method 1: Instagram Embed Captioned Page
     try:
         embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        }
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36"}
         r = requests.get(embed_url, headers=headers, timeout=10)
         v_match = re.search(r'"video_url":"([^"]+)"', r.text)
         if v_match:
@@ -512,7 +508,6 @@ def instagram_fallback(url):
     except Exception:
         pass
 
-    # Method 2:vxinstagram / ddinstagram OpenGraph Fallback
     for domain in ["https://www.ddinstagram.com", "https://kkinstagram.com"]:
         try:
             r = requests.get(f"{domain}/reel/{shortcode}", headers={"User-Agent": "TelegramBot (like TwitterBot)"}, timeout=10)
@@ -533,6 +528,113 @@ def instagram_fallback(url):
                 }
         except Exception:
             pass
+    return None
+
+# ==================== YOUTUBE SMART FALLBACK (NO COOKIES NEEDED) ====================
+def youtube_fallback(url):
+    match = re.search(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|shorts/|embed/))([0-9A-Za-z_-]{11})", url)
+    if not match:
+        return None
+    vid_id = match.group(1)
+
+    title = "YouTube Video"
+    thumb = f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
+
+    # 1. Fetch official title & thumbnail via oEmbed (Never blocked)
+    try:
+        oem = requests.get(f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid_id}&format=json", timeout=6)
+        if oem.status_code == 200:
+            title = oem.json().get("title", title)
+    except Exception:
+        pass
+
+    # 2. Try Piped Public APIs for direct streams
+    piped_hosts = [
+        "https://pipedapi.kavin.rocks",
+        "https://pipedapi.tokhmi.xyz",
+        "https://pipedapi.moomoo.me",
+        "https://api.piped.projectsegfault.com"
+    ]
+    for host in piped_hosts:
+        try:
+            r = requests.get(f"{host}/streams/{vid_id}", timeout=7)
+            if r.status_code == 200:
+                data = r.json()
+                v_streams = data.get("videoStreams", [])
+                a_streams = data.get("audioStreams", [])
+                q360, q720, q1080, best_v, mp3_u = None, None, None, None, None
+
+                for s in v_streams:
+                    if s.get("videoOnly") is False and s.get("url"):
+                        best_v = s.get("url")
+                        q_label = s.get("quality", "")
+                        if "360" in q_label:
+                            q360 = best_v
+                        elif "720" in q_label:
+                            q720 = best_v
+                        elif "1080" in q_label:
+                            q1080 = best_v
+
+                if a_streams:
+                    mp3_u = a_streams[0].get("url")
+
+                if best_v or mp3_u:
+                    main_link = best_v or mp3_u
+                    return {
+                        "title": data.get("title", title),
+                        "thumbnail": data.get("thumbnailUrl", thumb),
+                        "duration": "YouTube HD",
+                        "best_video": main_link,
+                        "q360": q360 or main_link,
+                        "q720": q720 or main_link,
+                        "q1080": q1080 or main_link,
+                        "mp3": mp3_u or main_link
+                    }
+        except Exception:
+            pass
+
+    # 3. Try Invidious Public APIs
+    inv_hosts = [
+        "https://inv.tux.pizza",
+        "https://invidious.nerdvpn.de",
+        "https://inv.nadeko.net"
+    ]
+    for host in inv_hosts:
+        try:
+            r = requests.get(f"{host}/api/v1/videos/{vid_id}", timeout=7)
+            if r.status_code == 200:
+                data = r.json()
+                f_streams = data.get("formatStreams", [])
+                a_formats = data.get("adaptiveFormats", [])
+                q360, q720, best_v, mp3_u = None, None, None, None
+
+                for s in f_streams:
+                    u = s.get("url")
+                    if u:
+                        best_v = u
+                        if "360" in s.get("qualityLabel", ""):
+                            q360 = u
+                        elif "720" in s.get("qualityLabel", ""):
+                            q720 = u
+
+                for a in a_formats:
+                    if "audio" in a.get("type", "") and a.get("url"):
+                        mp3_u = a.get("url")
+                        break
+
+                if best_v:
+                    return {
+                        "title": data.get("title", title),
+                        "thumbnail": thumb,
+                        "duration": "YouTube HD",
+                        "best_video": best_v,
+                        "q360": q360 or best_v,
+                        "q720": q720 or best_v,
+                        "q1080": best_v,
+                        "mp3": mp3_u or best_v
+                    }
+        except Exception:
+            pass
 
     return None
 
@@ -548,6 +650,7 @@ def extract():
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
+    # android_vr क्लाइंट क्लाउड सर्वर पर YouTube बॉट एरर को बाईपास करता है
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -555,7 +658,7 @@ def extract():
         "nocheckcertificate": True,
         "extractor_args": {
             "instagram": {"max_comments": [0]},
-            "youtube": {"player_client": ["ios", "tv_embedded", "mweb"]}
+            "youtube": {"player_client": ["android_vr", "tv", "ios"]}
         },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -563,7 +666,6 @@ def extract():
         }
     }
 
-    # अगर फोल्डर में cookies.txt मौजूद है तो अपने आप इस्तेमाल करेगा
     if os.path.exists("cookies.txt"):
         ydl_opts["cookiefile"] = "cookies.txt"
 
@@ -595,7 +697,6 @@ def extract():
                     elif height >= 1080:
                         q1080 = f_url
 
-            # FIXED: float duration को int में बदला गया ताकि Facebook पर एरर न आए
             raw_duration = info.get("duration")
             if raw_duration is not None:
                 duration_sec = int(float(raw_duration))
@@ -614,11 +715,18 @@ def extract():
                 "mp3": mp3_url or best_video
             })
     except Exception as e:
-        # अगर Instagram लिंक था और yt-dlp ब्लॉक हुआ, तो ऑटो-बाईपास चलाएं
+        # अगर Instagram लिंक था तो Instagram Fallback चलाएं
         if "instagram.com" in url:
             fallback_data = instagram_fallback(url)
             if fallback_data:
                 return jsonify(fallback_data)
+
+        # अगर YouTube लिंक था तो YouTube Fallback चलाएं
+        if "youtube.com" in url or "youtu.be" in url:
+            yt_data = youtube_fallback(url)
+            if yt_data:
+                return jsonify(yt_data)
+
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
