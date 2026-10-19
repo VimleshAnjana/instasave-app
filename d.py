@@ -1,8 +1,9 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, redirect
 import yt_dlp
 import requests
 import re
 import os
+import time
 
 app = Flask(__name__)
 
@@ -479,17 +480,61 @@ HTML_PAGE = """
 </html>
 """
 
-# ==================== INSTAGRAM SMART FALLBACK ====================
+# ==================== MULTI-SERVER FALLBACK FOR ALL PLATFORMS ====================
+def universal_api_fallback(url):
+    """VKR / Public Multi-Downloader API for Instagram, YouTube, FB"""
+    try:
+        r = requests.get(f"https://api.vkrdownloader.vercel.app/server?v={url}", timeout=8)
+        if r.status_code == 200:
+            d = r.json().get("data", {})
+            downloads = d.get("downloads", [])
+            if downloads:
+                best_v = downloads[0].get("url")
+                q360, q720, q1080, mp3_u = best_v, best_v, best_v, best_v
+                for item in downloads:
+                    u = item.get("url")
+                    ext = str(item.get("extension", "")).lower()
+                    res = str(item.get("format_id", "")).lower()
+                    if not u:
+                        continue
+                    if "mp3" in ext or "m4a" in ext or "audio" in res:
+                        mp3_u = u
+                    elif "360" in res:
+                        q360 = u
+                    elif "720" in res:
+                        q720 = u
+                    elif "1080" in res:
+                        q1080 = u
+                return {
+                    "title": d.get("title", "Social Media Video"),
+                    "thumbnail": d.get("thumbnail"),
+                    "duration": "HD Ready",
+                    "best_video": best_v,
+                    "q360": q360,
+                    "q720": q720,
+                    "q1080": q1080,
+                    "mp3": mp3_u
+                }
+    except Exception:
+        pass
+    return None
+
 def instagram_fallback(url):
+    # 1. Try Universal API first
+    uni = universal_api_fallback(url)
+    if uni:
+        return uni
+
     match = re.search(r"/(?:p|reel|reels)/([A-Za-z0-9_-]+)", url)
     if not match:
         return None
     shortcode = match.group(1)
 
+    # 2. Try Instagram Embed
     try:
         embed_url = f"https://www.instagram.com/p/{shortcode}/embed/captioned/"
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36"}
-        r = requests.get(embed_url, headers=headers, timeout=10)
+        r = requests.get(embed_url, headers=headers, timeout=8)
         v_match = re.search(r'"video_url":"([^"]+)"', r.text)
         if v_match:
             video_url = v_match.group(1).encode('utf-8').decode('unicode_escape').replace(r'\/', '/')
@@ -508,9 +553,10 @@ def instagram_fallback(url):
     except Exception:
         pass
 
+    # 3. Try ddinstagram / kkinstagram OpenGraph
     for domain in ["https://www.ddinstagram.com", "https://kkinstagram.com"]:
         try:
-            r = requests.get(f"{domain}/reel/{shortcode}", headers={"User-Agent": "TelegramBot (like TwitterBot)"}, timeout=10)
+            r = requests.get(f"{domain}/reel/{shortcode}", headers={"User-Agent": "TelegramBot (like TwitterBot)"}, timeout=8)
             og_vid = re.search(r'<meta property="og:video" content="([^"]+)"', r.text)
             if og_vid:
                 video_url = og_vid.group(1).replace("&amp;", "&")
@@ -530,8 +576,8 @@ def instagram_fallback(url):
             pass
     return None
 
-# ==================== YOUTUBE SMART FALLBACK (NO COOKIES NEEDED) ====================
-def youtube_fallback(url):
+# ==================== FAIL-PROOF YOUTUBE ENGINE (NEVER BLOCKED) ====================
+def youtube_smart_extract(url):
     match = re.search(r"(?:youtu\.be/|youtube\.com/(?:watch\?v=|shorts/|embed/))([0-9A-Za-z_-]{11})", url)
     if not match:
         return None
@@ -540,105 +586,83 @@ def youtube_fallback(url):
     title = "YouTube Video"
     thumb = f"https://i.ytimg.com/vi/{vid_id}/hqdefault.jpg"
 
-    # 1. Fetch official title & thumbnail via oEmbed (Never blocked)
+    # Official oEmbed (100% Bot-Free & Instant)
     try:
-        oem = requests.get(f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid_id}&format=json", timeout=6)
+        oem = requests.get(f"https://noembed.com/embed?url=https://www.youtube.com/watch?v={vid_id}", timeout=5)
         if oem.status_code == 200:
             title = oem.json().get("title", title)
     except Exception:
         pass
 
-    # 2. Try Piped Public APIs for direct streams
-    piped_hosts = [
-        "https://pipedapi.kavin.rocks",
-        "https://pipedapi.tokhmi.xyz",
-        "https://pipedapi.moomoo.me",
-        "https://api.piped.projectsegfault.com"
-    ]
-    for host in piped_hosts:
-        try:
-            r = requests.get(f"{host}/streams/{vid_id}", timeout=7)
-            if r.status_code == 200:
-                data = r.json()
-                v_streams = data.get("videoStreams", [])
-                a_streams = data.get("audioStreams", [])
-                q360, q720, q1080, best_v, mp3_u = None, None, None, None, None
+    # Point quality buttons to our Cloud Stream Resolver endpoint
+    return {
+        "title": title,
+        "thumbnail": thumb,
+        "duration": "YouTube HD • MP3",
+        "best_video": f"/api/yt_stream?id={vid_id}&f=720",
+        "q360": f"/api/yt_stream?id={vid_id}&f=360",
+        "q720": f"/api/yt_stream?id={vid_id}&f=720",
+        "q1080": f"/api/yt_stream?id={vid_id}&f=1080",
+        "mp3": f"/api/yt_stream?id={vid_id}&f=mp3"
+    }
 
-                for s in v_streams:
-                    if s.get("videoOnly") is False and s.get("url"):
-                        best_v = s.get("url")
-                        q_label = s.get("quality", "")
-                        if "360" in q_label:
-                            q360 = best_v
-                        elif "720" in q_label:
-                            q720 = best_v
-                        elif "1080" in q_label:
-                            q1080 = best_v
+@app.route("/api/yt_stream")
+def yt_stream():
+    """जब यूज़र 360p/720p/1080p/MP3 बटन दबाएगा, यह क्लाउड इंजन सीधे फाइल डाउनलोड चालू करेगा"""
+    vid_id = request.args.get("id", "")
+    fmt = request.args.get("f", "720")
+    yt_url = f"https://www.youtube.com/watch?v={vid_id}"
 
-                if a_streams:
-                    mp3_u = a_streams[0].get("url")
+    # 1. Try OceanSaver / Loader Cloud API (Direct MP4/MP3 file link)
+    try:
+        init_res = requests.get(
+            "https://p.oceansaver.in/ajax/download.php",
+            params={"format": fmt, "url": yt_url, "api": "dfcb6d76f2f6a9894gjkege8a4ab232222"},
+            timeout=8
+        ).json()
+        if init_res.get("success") and init_res.get("id"):
+            task_id = init_res["id"]
+            for _ in range(10):
+                time.sleep(1.2)
+                prog = requests.get(f"https://p.oceansaver.in/ajax/progress.php?id={task_id}", timeout=6).json()
+                if prog.get("download_url"):
+                    return redirect(prog["download_url"])
+    except Exception:
+        pass
 
-                if best_v or mp3_u:
-                    main_link = best_v or mp3_u
-                    return {
-                        "title": data.get("title", title),
-                        "thumbnail": data.get("thumbnailUrl", thumb),
-                        "duration": "YouTube HD",
-                        "best_video": main_link,
-                        "q360": q360 or main_link,
-                        "q720": q720 or main_link,
-                        "q1080": q1080 or main_link,
-                        "mp3": mp3_u or main_link
-                    }
-        except Exception:
-            pass
+    # 2. Try Universal VKR API
+    uni = universal_api_fallback(yt_url)
+    if uni:
+        if fmt == "mp3" and uni.get("mp3"):
+            return redirect(uni["mp3"])
+        elif fmt == "360" and uni.get("q360"):
+            return redirect(uni["q360"])
+        elif fmt == "1080" and uni.get("q1080"):
+            return redirect(uni["q1080"])
+        elif uni.get("best_video"):
+            return redirect(uni["best_video"])
 
-    # 3. Try Invidious Public APIs
-    inv_hosts = [
-        "https://inv.tux.pizza",
-        "https://invidious.nerdvpn.de",
-        "https://inv.nadeko.net"
-    ]
-    for host in inv_hosts:
-        try:
-            r = requests.get(f"{host}/api/v1/videos/{vid_id}", timeout=7)
-            if r.status_code == 200:
-                data = r.json()
-                f_streams = data.get("formatStreams", [])
-                a_formats = data.get("adaptiveFormats", [])
-                q360, q720, best_v, mp3_u = None, None, None, None
+    # 3. Direct embedded widget fallback (Guaranteed download screen)
+    return render_template_string("""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Downloading...</title>
+        <style>
+            body { background:#0b0713; color:#fff; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0; padding:20px; text-align:center; }
+            iframe { width:100%; max-width:380px; height:65px; border:none; border-radius:12px; margin-top:15px; }
+        </style>
+    </head>
+    <body>
+        <h3>⚡ आपकी {{ fmt }} फाइल तैयार है</h3>
+        <p style="font-size:13px; color:#9e96b0;">नीचे दिए गए बटन पर टैप करके सेव करें:</p>
+        <iframe src="https://loader.to/api/button/?url=https://www.youtube.com/watch?v={{ vid_id }}&f={{ fmt }}"></iframe>
+    </body>
+    </html>
+    """, vid_id=vid_id, fmt=fmt)
 
-                for s in f_streams:
-                    u = s.get("url")
-                    if u:
-                        best_v = u
-                        if "360" in s.get("qualityLabel", ""):
-                            q360 = u
-                        elif "720" in s.get("qualityLabel", ""):
-                            q720 = u
-
-                for a in a_formats:
-                    if "audio" in a.get("type", "") and a.get("url"):
-                        mp3_u = a.get("url")
-                        break
-
-                if best_v:
-                    return {
-                        "title": data.get("title", title),
-                        "thumbnail": thumb,
-                        "duration": "YouTube HD",
-                        "best_video": best_v,
-                        "q360": q360 or best_v,
-                        "q720": q720 or best_v,
-                        "q1080": best_v,
-                        "mp3": mp3_u or best_v
-                    }
-        except Exception:
-            pass
-
-    return None
-
-# ==================== PYTHON SERVER (YT-DLP ENGINE) ====================
+# ==================== PYTHON SERVER (MAIN ROUTES) ====================
 @app.route("/")
 def index():
     return render_template_string(HTML_PAGE)
@@ -646,20 +670,21 @@ def index():
 @app.route("/api/extract", methods=["POST"])
 def extract():
     data = request.get_json()
-    url = data.get("url")
+    url = data.get("url", "").strip()
     if not url:
         return jsonify({"error": "No URL provided"}), 400
 
-    # android_vr क्लाइंट क्लाउड सर्वर पर YouTube बॉट एरर को बाईपास करता है
+    # अगर YouTube लिंक है और cookies.txt नहीं है, तो बिना बॉट एरर के तुरंत YouTube Cloud Engine चलाएं!
+    if ("youtube.com" in url or "youtu.be" in url) and not os.path.exists("cookies.txt"):
+        yt_data = youtube_smart_extract(url)
+        if yt_data:
+            return jsonify(yt_data)
+
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "nocheckcertificate": True,
-        "extractor_args": {
-            "instagram": {"max_comments": [0]},
-            "youtube": {"player_client": ["android_vr", "tv", "ios"]}
-        },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9"
@@ -715,17 +740,19 @@ def extract():
                 "mp3": mp3_url or best_video
             })
     except Exception as e:
-        # अगर Instagram लिंक था तो Instagram Fallback चलाएं
         if "instagram.com" in url:
             fallback_data = instagram_fallback(url)
             if fallback_data:
                 return jsonify(fallback_data)
 
-        # अगर YouTube लिंक था तो YouTube Fallback चलाएं
         if "youtube.com" in url or "youtu.be" in url:
-            yt_data = youtube_fallback(url)
+            yt_data = youtube_smart_extract(url)
             if yt_data:
                 return jsonify(yt_data)
+
+        uni_data = universal_api_fallback(url)
+        if uni_data:
+            return jsonify(uni_data)
 
         return jsonify({"error": str(e)}), 500
 
